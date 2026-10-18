@@ -1,4 +1,4 @@
-# Contributing to flakewatch
+# Contributing to flakeguard
 
 Thanks for wanting to help — genuinely. This project exists for the
 developer community, and it only gets better with more hands on it.
@@ -14,8 +14,8 @@ Look for issues labelled **`good first issue`**.
 ## Setting up a development environment
 
 ```bash
-git clone https://github.com/PrathameshKulkarni2k4/flakewatch
-cd flakewatch
+git clone https://github.com/PrathameshKulkarni2k4/flakeguard
+cd flakeguard
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
@@ -28,16 +28,16 @@ issue.
 ## Running the tool on the examples
 
 ```bash
-flakewatch scan examples/reports
-flakewatch scan examples/reports --format json
-flakewatch scan examples/reports --fail-on-flaky
+flakeguard scan examples/reports
+flakeguard scan examples/reports --format json
+flakeguard scan examples/reports --fail-on-flaky
 ```
 
 ## Adding a new report format
 
-1. Create `src/flakewatch/parsers/<format>.py` with a function that takes a
-   file path and returns a list of `flakewatch.models.TestCase`.
-2. Register it in `src/flakewatch/parsers/__init__.py` under `by_suffix`.
+1. Create `src/flakeguard/parsers/<format>.py` with a function that takes a
+   file path and returns a list of `flakeguard.models.TestCase`.
+2. Register it in `src/flakeguard/parsers/__init__.py` under `by_suffix`.
 3. Add a fixture file under `examples/reports/` and a test under `tests/`.
 
 That's the whole job. A good parser is small and boring, which is exactly

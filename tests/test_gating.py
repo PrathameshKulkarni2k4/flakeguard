@@ -2,7 +2,7 @@
 
 import pathlib
 
-from flakewatch.cli import main
+from flakeguard.cli import main
 
 REPORTS = pathlib.Path(__file__).resolve().parents[1] / "examples" / "reports"
 

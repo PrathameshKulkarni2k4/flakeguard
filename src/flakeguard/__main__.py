@@ -1,4 +1,4 @@
-"""Allow ``python -m flakewatch`` to work like the ``flakewatch`` script."""
+"""Allow ``python -m flakeguard`` to work like the ``flakeguard`` script."""
 
 from .cli import main
 

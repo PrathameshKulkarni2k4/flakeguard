@@ -1,6 +1,6 @@
-# Example: run Flakewatch on every pull request.
+# Example: run Flakeguard on every pull request.
 #
-# Copy this into your own repository as .github/workflows/flakewatch.yml,
+# Copy this into your own repository as .github/workflows/flakeguard.yml,
 # then adjust the "Generate reports" step to run *your* test suite a few
 # times and collect JUnit XML into a directory.
 
@@ -10,7 +10,7 @@ on:
   pull_request:
 
 jobs:
-  flakewatch:
+  flakeguard:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -32,7 +32,7 @@ jobs:
           done
 
       # 2. Analyse them and comment on the PR.
-      - name: Flakewatch
+      - name: Flakeguard
         uses: ./
         with:
           reports: reports

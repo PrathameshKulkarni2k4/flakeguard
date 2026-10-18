@@ -3,7 +3,7 @@
 import json
 import pathlib
 
-from flakewatch.cli import main
+from flakeguard.cli import main
 
 REPORTS = pathlib.Path(__file__).resolve().parents[1] / "examples" / "reports"
 
@@ -12,7 +12,7 @@ def test_scan_directory_text(capsys):
     rc = main(["scan", str(REPORTS)])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "flakewatch report" in out
+    assert "flakeguard report" in out
     assert "test_applies_coupon" in out
     # the always-failing test must NOT be called flaky
     assert "test_totals_are_stable" not in out
@@ -42,7 +42,7 @@ def test_min_runs_filters_single_run(tmp_path):
       <testcase classname="c" name="only_once"/>
     </testsuite></testsuites>"""
     (tmp_path / "one.xml").write_text(xml)
-    from flakewatch.cli import main as cli_main  # noqa: F401  (kept explicit)
+    from flakeguard.cli import main as cli_main  # noqa: F401  (kept explicit)
 
     rc = main(["scan", str(tmp_path)])
     assert rc == 0  # runs fine, just nothing reported

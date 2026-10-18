@@ -1,4 +1,4 @@
-"""Make ``import flakewatch`` work from a checkout without installing."""
+"""Make ``import flakeguard`` work from a checkout without installing."""
 
 import pathlib
 import sys

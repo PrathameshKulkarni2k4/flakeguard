@@ -1,4 +1,4 @@
-"""The heart of flakewatch: turning many runs into a flakiness score.
+"""The heart of flakeguard: turning many runs into a flakiness score.
 
 The idea is simple and explainable. Take every test, look at how it
 behaved across all the runs we were given, and ask: *how often does it

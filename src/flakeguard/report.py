@@ -20,7 +20,7 @@ def render_text(stats: Sequence[FlakeStats], min_runs: int) -> str:
     lines: List[str] = []
     total = len(stats)
     lines.append("")
-    lines.append("flakewatch report")
+    lines.append("flakeguard report")
     lines.append("=" * 60)
     lines.append(f"tests analysed : {total}")
     lines.append(f"flaky (>= {min_runs} runs): {len(flaky)}")
@@ -84,7 +84,7 @@ def render_json(stats: Sequence[FlakeStats], min_runs: int) -> str:
 
 def render_markdown(stats: Sequence[FlakeStats], min_runs: int) -> str:
     flaky = [s for s in stats if s.is_flaky() and s.considered >= min_runs]
-    lines = ["## flakewatch report", ""]
+    lines = ["## flakeguard report", ""]
     if not flaky:
         lines.append("No flaky tests found.")
         return "\n".join(lines)

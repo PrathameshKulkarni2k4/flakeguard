@@ -1,7 +1,7 @@
 """Tests for the flakiness scoring engine."""
 
-from flakewatch.models import Outcome, TestCase
-from flakewatch.scoring import _score, analyze
+from flakeguard.models import Outcome, TestCase
+from flakeguard.scoring import _score, analyze
 
 
 def case(name, outcome, suite="s", classname="c", message=None):

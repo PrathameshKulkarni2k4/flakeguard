@@ -21,4 +21,4 @@ jobs:
       - name: Test
         run: pytest -q
       - name: Self-check (dogfood)
-        run: flakewatch scan examples/reports
+        run: flakeguard scan examples/reports

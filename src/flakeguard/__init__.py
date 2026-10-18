@@ -1,4 +1,4 @@
-"""flakewatch - find, rank, and quarantine flaky tests.
+"""flakeguard - find, rank, and quarantine flaky tests.
 
 A language-agnostic tool: point it at the test reports your CI already
 produces (JUnit XML and friends) and it tells you which tests are flaky,

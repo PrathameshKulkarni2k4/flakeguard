@@ -10,7 +10,7 @@ assignees: ""
 The exact command, please.
 
 ```
-flakewatch scan ...
+flakeguard scan ...
 ```
 
 **What happened?**
@@ -23,6 +23,6 @@ enormously.
 
 **Environment**
 
-- flakewatch version (`flakewatch --version`):
+- flakeguard version (`flakeguard --version`):
 - Python version:
 - OS:

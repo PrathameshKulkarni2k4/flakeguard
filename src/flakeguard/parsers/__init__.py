@@ -1,7 +1,7 @@
 """Report parsers.
 
 Each parser turns a framework's native test report into a list of
-:class:`flakewatch.models.TestCase`. Adding support for a new framework
+:class:`flakeguard.models.TestCase`. Adding support for a new framework
 means adding one module here and registering it in ``by_suffix``.
 """
 

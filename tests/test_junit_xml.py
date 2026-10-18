@@ -2,8 +2,8 @@
 
 import pathlib
 
-from flakewatch.models import Outcome
-from flakewatch.parsers.junit_xml import parse_junit_xml
+from flakeguard.models import Outcome
+from flakeguard.parsers.junit_xml import parse_junit_xml
 
 REPORTS = pathlib.Path(__file__).resolve().parents[1] / "examples" / "reports"
 

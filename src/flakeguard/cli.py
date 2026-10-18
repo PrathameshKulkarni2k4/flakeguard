@@ -1,8 +1,8 @@
 """Command-line entry point.
 
-    flakewatch scan ./reports
-    flakewatch scan run1.xml run2.xml run3.xml --format json
-    flakewatch scan ./ci-artifacts --min-runs 5 --min-score 0.2
+    flakeguard scan ./reports
+    flakeguard scan run1.xml run2.xml run3.xml --format json
+    flakeguard scan ./ci-artifacts --min-runs 5 --min-score 0.2
 """
 
 from __future__ import annotations
@@ -62,10 +62,10 @@ def _load_runs(files: List[str]) -> tuple[list, list]:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="flakewatch",
+        prog="flakeguard",
         description="Find, rank, and quarantine flaky tests from test reports.",
     )
-    p.add_argument("--version", action="version", version=f"flakewatch {__version__}")
+    p.add_argument("--version", action="version", version=f"flakeguard {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
     scan = sub.add_parser("scan", help="analyse one or more report files/dirs")
@@ -105,7 +105,7 @@ def main(argv: List[str] | None = None) -> int:
     files = _discover(args.paths)
     if not files:
         print(
-            "flakewatch: no test report files found.\n"
+            "flakeguard: no test report files found.\n"
             "  I look for JUnit XML (.xml) files - give me a file, a glob, or a\n"
             "  directory. Need to make one? Most frameworks can, for example:\n"
             "      pytest --junitxml=report.xml",
@@ -115,10 +115,10 @@ def main(argv: List[str] | None = None) -> int:
 
     runs, errors = _load_runs(files)
     for err in errors:
-        print(f"flakewatch: warning: {err}", file=sys.stderr)
+        print(f"flakeguard: warning: {err}", file=sys.stderr)
     if not runs:
         print(
-            f"flakewatch: none of the {len(files)} file(s) could be parsed.\n"
+            f"flakeguard: none of the {len(files)} file(s) could be parsed.\n"
             "  See the warnings above - is the file valid JUnit XML?",
             file=sys.stderr,
         )
@@ -134,13 +134,13 @@ def main(argv: List[str] | None = None) -> int:
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:
             fh.write(report + "\n")
-        print(f"flakewatch: wrote {args.output} ({len(runs)} runs)", file=sys.stderr)
+        print(f"flakeguard: wrote {args.output} ({len(runs)} runs)", file=sys.stderr)
     else:
         print(report)
 
     flaky_count = sum(1 for s in stats if s.is_flaky() and s.considered >= args.min_runs)
     if args.fail_on_flaky and flaky_count > 0:
-        print(f"flakewatch: {flaky_count} flaky test(s) found", file=sys.stderr)
+        print(f"flakeguard: {flaky_count} flaky test(s) found", file=sys.stderr)
         return 1
     return 0
 

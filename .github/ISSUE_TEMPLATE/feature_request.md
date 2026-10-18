@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for flakewatch
+about: Suggest an idea for flakeguard
 title: ""
 labels: enhancement
 assignees: ""

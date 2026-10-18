@@ -3,7 +3,7 @@
 Almost every test framework can emit this: pytest (``--junitxml``), Maven
 and Gradle Surefire, Go's ``gotestsum --junitfile``, Jest
 (``jest-junit``), RSpec (``rspec_junit_formatter``), .NET, PHPUnit, and
-more. That is what makes flakewatch language-agnostic.
+more. That is what makes flakeguard language-agnostic.
 """
 
 from __future__ import annotations

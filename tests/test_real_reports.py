@@ -7,8 +7,8 @@ jest's habit of repeating the test name in both classname and name).
 
 import pathlib
 
-from flakewatch.models import Outcome
-from flakewatch.parsers.junit_xml import parse_junit_xml
+from flakeguard.models import Outcome
+from flakeguard.parsers.junit_xml import parse_junit_xml
 
 FIXTURES = pathlib.Path(__file__).resolve().parent / "fixtures"
 

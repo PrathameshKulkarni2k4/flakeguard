@@ -1,4 +1,4 @@
-name: "Flakewatch"
+name: "Flakeguard"
 description: "Find, rank and report flaky tests from your JUnit XML reports."
 author: "Prathamesh Kulkarni"
 branding:
@@ -38,7 +38,7 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Install flakewatch
+    - name: Install flakeguard
       shell: bash
       run: python -m pip install --quiet "${{ github.action_path }}"
 
@@ -47,18 +47,18 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        flakewatch scan "${{ inputs.reports }}" \
+        flakeguard scan "${{ inputs.reports }}" \
           --min-runs "${{ inputs.min-runs }}" \
           --min-score "${{ inputs.min-score }}" \
-          --format markdown -o flakewatch-report.md
-        flakewatch scan "${{ inputs.reports }}" \
+          --format markdown -o flakeguard-report.md
+        flakeguard scan "${{ inputs.reports }}" \
           --min-runs "${{ inputs.min-runs }}" \
           --min-score "${{ inputs.min-score }}" \
-          --format json -o flakewatch-report.json
-        count=$(python -c "import json;print(json.load(open('flakewatch-report.json'))['summary']['flaky'])")
+          --format json -o flakeguard-report.json
+        count=$(python -c "import json;print(json.load(open('flakeguard-report.json'))['summary']['flaky'])")
         echo "flaky-count=$count" >> "$GITHUB_OUTPUT"
-        echo "report-path=flakewatch-report.md" >> "$GITHUB_OUTPUT"
-        echo "flakewatch found $count flaky test(s)"
+        echo "report-path=flakeguard-report.md" >> "$GITHUB_OUTPUT"
+        echo "flakeguard found $count flaky test(s)"
 
     - name: Comment on pull request
       if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
@@ -66,8 +66,8 @@ runs:
       with:
         script: |
           const fs = require('fs');
-          const marker = '<!-- flakewatch-report -->';
-          const body = marker + '\n' + fs.readFileSync('flakewatch-report.md', 'utf8');
+          const marker = '<!-- flakeguard-report -->';
+          const body = marker + '\n' + fs.readFileSync('flakeguard-report.md', 'utf8');
           const { owner, repo } = context.repo;
           const issue_number = context.issue.number;
           const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
@@ -85,7 +85,7 @@ runs:
         count="${{ steps.scan.outputs.flaky-count }}"
         max="${{ inputs.max-flaky }}"
         if [ "$count" -gt "$max" ]; then
-          echo "::error::flakewatch found $count flaky tests, exceeding the budget of $max"
+          echo "::error::flakeguard found $count flaky tests, exceeding the budget of $max"
           exit 1
         fi
-        echo "flakewatch: $count flaky test(s), within budget ($max)"
+        echo "flakeguard: $count flaky test(s), within budget ($max)"

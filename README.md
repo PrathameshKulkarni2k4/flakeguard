@@ -1,16 +1,16 @@
-# flakewatch
+# flakeguard
 
 ### Your test suite is lying to you.
 
-![flakewatch demo](docs/demo.gif)
+![flakeguard demo](docs/demo.gif)
 
-Flakewatch finds the tests that **randomly pass and fail**, ranks them by how
+Flakeguard finds the tests that **randomly pass and fail**, ranks them by how
 unreliable they are, and shows you why — so you can trust your tests again.
 
 **Free · private · works with any language.** No account, no sign-up, and
 nothing leaves your machine.
 
-[![CI](https://github.com/PrathameshKulkarni2k4/flakewatch/actions/workflows/ci.yml/badge.svg)](https://github.com/PrathameshKulkarni2k4/flakewatch/actions/workflows/ci.yml)
+[![CI](https://github.com/PrathameshKulkarni2k4/flakeguard/actions/workflows/ci.yml/badge.svg)](https://github.com/PrathameshKulkarni2k4/flakeguard/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 
@@ -23,22 +23,22 @@ that a real bug? A flaky test? Nobody knows — so everyone ignores it, and
 that is exactly how real bugs hide.
 
 A flaky test costs a team hours, and slowly destroys trust in the entire
-test suite. Flakewatch fixes the hard half of the problem: it tells you
+test suite. Flakeguard fixes the hard half of the problem: it tells you
 **exactly which tests are unreliable**, and how unreliable.
 
 ## Try it in 60 seconds
 
 ```bash
-pipx install flakewatch
-flakewatch scan ./reports        # a folder of test reports
+pipx install flakeguard
+flakeguard scan ./reports        # a folder of test reports
 ```
 
 No reports yet? Run it against the examples bundled in this repo:
 
 ```bash
-git clone https://github.com/PrathameshKulkarni2k4/flakewatch
-cd flakewatch
-flakewatch scan examples/reports
+git clone https://github.com/PrathameshKulkarni2k4/flakeguard
+cd flakeguard
+flakeguard scan examples/reports
 ```
 
 ## What it does
@@ -53,7 +53,7 @@ flakewatch scan examples/reports
 
 ## Works with any language
 
-Flakewatch reads **JUnit XML**, the report format almost every test
+Flakeguard reads **JUnit XML**, the report format almost every test
 framework can produce. One tool, every language:
 
 | Language / framework | How to produce the report |
@@ -68,8 +68,8 @@ framework can produce. One tool, every language:
 ## Use in CI (GitHub Actions)
 
 ```yaml
-- name: Flakewatch
-  uses: PrathameshKulkarni2k4/flakewatch@main
+- name: Flakeguard
+  uses: PrathameshKulkarni2k4/flakeguard@main
   with:
     reports: reports      # dir/glob of JUnit XML files
     min-runs: 3           # ignore tests seen in fewer runs
@@ -83,7 +83,7 @@ complete workflow that runs a suite several times and feeds the reports in.
 To gate locally or in any other CI, use the exit code:
 
 ```bash
-flakewatch scan ./reports --fail-on-flaky   # exits 1 if anything is flaky
+flakeguard scan ./reports --fail-on-flaky   # exits 1 if anything is flaky
 ```
 
 ## How the score works
