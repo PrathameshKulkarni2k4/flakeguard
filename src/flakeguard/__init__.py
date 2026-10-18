@@ -5,11 +5,17 @@ produces (JUnit XML and friends) and it tells you which tests are flaky,
 how flaky, and why it thinks so.
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+try:
+    __version__ = _pkg_version("flakeguard")
+except PackageNotFoundError:  # running from a source checkout, not installed
+    __version__ = "0.0.0+unknown"
 
 from .models import Outcome, TestCase
 from .scoring import FlakeStats, analyze
 from .parsers.junit_xml import parse_junit_xml
+from .parsers.tap import parse_tap
 
 __all__ = [
     "__version__",
@@ -18,4 +24,5 @@ __all__ = [
     "FlakeStats",
     "analyze",
     "parse_junit_xml",
+    "parse_tap",
 ]

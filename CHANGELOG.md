@@ -6,6 +6,11 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `flakeguard --version` now reports the real installed version, read from
+  the package metadata, instead of a hard-coded value that could drift.
+
 ## [0.2.0] - 2026-10-18
 
 ### Added
