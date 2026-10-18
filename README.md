@@ -1,60 +1,89 @@
 # flakewatch
 
-**Find, rank, and quarantine flaky tests — in any language.**
+### Your test suite is lying to you.
 
-Flaky tests are a tax on every team that writes tests. A test that passes
-nine times and fails the tenth erodes trust in your whole suite, wastes CI
-minutes, and trains people to hit "re-run" instead of investigating.
+![flakewatch demo](docs/demo.gif)
 
-`flakewatch` reads the test reports your CI *already produces* and tells
-you which tests are flaky, how flaky they are, and why it thinks so.
+Flakewatch finds the tests that **randomly pass and fail**, ranks them by how
+unreliable they are, and shows you why — so you can trust your tests again.
 
-## Why it's language-agnostic
+**Free · private · works with any language.** No account, no sign-up, and
+nothing leaves your machine.
 
-It works from **JUnit XML**, the interchange format almost every framework
-can emit:
+[![CI](https://github.com/PrathameshKulkarni2k4/flakewatch/actions/workflows/ci.yml/badge.svg)](https://github.com/PrathameshKulkarni2k4/flakewatch/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+
+---
+
+## The problem, in 30 seconds
+
+You have a test that fails once in a while. You re-run it. It passes. Was
+that a real bug? A flaky test? Nobody knows — so everyone ignores it, and
+that is exactly how real bugs hide.
+
+A flaky test costs a team hours, and slowly destroys trust in the entire
+test suite. Flakewatch fixes the hard half of the problem: it tells you
+**exactly which tests are unreliable**, and how unreliable.
+
+## Try it in 60 seconds
+
+```bash
+pipx install flakewatch
+flakewatch scan ./reports        # a folder of test reports
+```
+
+No reports yet? Run it against the examples bundled in this repo:
+
+```bash
+git clone https://github.com/PrathameshKulkarni2k4/flakewatch
+cd flakewatch
+flakewatch scan examples/reports
+```
+
+## What it does
+
+- Reads your test results from **many runs** (the more runs, the sharper the
+  picture).
+- Finds the tests that **disagree with themselves** across those runs.
+- Gives each one a score from **0 (solid) to 1 (a coin-flip)**.
+- Shows the **latest failure message**, so you can go fix it.
+- Runs in your **CI** and can leave a comment on the pull request — or block
+  it when flakiness spikes.
+
+## Works with any language
+
+Flakewatch reads **JUnit XML**, the report format almost every test
+framework can produce. One tool, every language:
 
 | Language / framework | How to produce the report |
 |---|---|
 | Python (pytest) | `pytest --junitxml=report.xml` |
 | Java (Maven / Gradle) | Surefire writes JUnit XML automatically |
 | Go | `gotestsum --junitfile report.xml` |
-| JavaScript (Jest) | `jest-junit` reporter |
-| Ruby (RSpec) | `rspec_junit_formatter` |
+| JavaScript (Jest) | the `jest-junit` reporter |
+| Ruby (RSpec) | the `rspec_junit_formatter` gem |
 | .NET, PHPUnit, … | built-in or plugin JUnit output |
 
-One tool, every language.
+## Use in CI (GitHub Actions)
 
-## Install
+```yaml
+- name: Flakewatch
+  uses: PrathameshKulkarni2k4/flakewatch@main
+  with:
+    reports: reports      # dir/glob of JUnit XML files
+    min-runs: 3           # ignore tests seen in fewer runs
+    max-flaky: 0          # fail if any flaky test is found (-1 = never fail)
+    comment: "true"       # post the report as a PR comment
+```
+
+See [`.github/workflows/example.yml`](.github/workflows/example.yml) for a
+complete workflow that runs a suite several times and feeds the reports in.
+
+To gate locally or in any other CI, use the exit code:
 
 ```bash
-pip install flakewatch
-```
-
-## Use
-
-Collect a few runs of reports, then point flakewatch at them:
-
-```bash
-flakewatch scan ./ci-artifacts
-flakewatch scan run1.xml run2.xml run3.xml
-flakewatch scan ./reports --min-runs 5 --format json -o flaky.json
-```
-
-Example output:
-
-```
-flakewatch report
-============================================================
-tests analysed : 3
-flaky (>= 2 runs): 1
-
- score  bar         runs  pass  fail  test
-------------------------------------------------------------
-  0.67  #######...     3     2     1  tests.test_checkout::test_applies_coupon
-
-latest failure in tests.test_checkout::test_applies_coupon:
-  AssertionError: coupon discount not applied
+flakewatch scan ./reports --fail-on-flaky   # exits 1 if anything is flaky
 ```
 
 ## How the score works
@@ -69,52 +98,25 @@ score = 2 * min(passes, failures) / (passes + failures)
 - always passes, or always fails → **0.0** (consistent, *not* flaky)
 - flips on every run (50/50) → **1.0** (maximally flaky)
 
-It's deliberately explainable — no black box. You can read the number and
+It is deliberately explainable — no black box. You can read the number and
 know exactly how it was derived.
-
-## Use in GitHub Actions
-
-Flakewatch ships as a composite Action. It analyses your reports, posts the
-result as a pull-request comment, and can fail the check when flakiness
-exceeds a budget you set.
-
-```yaml
-- name: Flakewatch
-  uses: PrathameshKulkarni2k4/flakewatch@main
-  with:
-    reports: reports      # dir/glob of JUnit XML files
-    min-runs: 3           # ignore tests seen in fewer runs
-    max-flaky: 0          # fail if any flaky test is found (-1 = never fail)
-    comment: "true"       # post the report as a PR comment
-```
-
-See [`.github/workflows/example.yml`](.github/workflows/example.yml) for a
-complete workflow that runs a suite five times and feeds the reports in.
-
-To gate locally or in any other CI, use the exit code:
-
-```bash
-flakewatch scan ./reports --fail-on-flaky   # exits 1 if anything is flaky
-```
 
 ## Roadmap
 
 - [x] JUnit XML parsing, flakiness scoring, text/JSON/Markdown reports
 - [x] GitHub Action with PR comments and a flakiness budget
 - [ ] TAP and native JSON report formats
-- [ ] SQLite history so it learns across builds
+- [ ] CI history so it learns across builds
+- [ ] Failure-signature clustering (group the *same* flake across tests)
 - [ ] Quarantine file so known flakes are set aside, not deleted
-- [ ] Failure-signature clustering (group the *same* flake)
 
-## Development
+## Contributing
 
-```bash
-git clone https://github.com/PrathameshKulkarni2k4/flakewatch
-cd flakewatch
-pip install -e ".[dev]"
-pytest
-```
+Contributions are very welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Adding support for a new report format is a great first contribution and is
+designed to be small. Please be kind; this project follows a
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

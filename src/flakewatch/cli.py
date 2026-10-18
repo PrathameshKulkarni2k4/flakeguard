@@ -33,7 +33,11 @@ def _discover(paths: List[str]) -> List[str]:
                     if os.path.splitext(fname)[1].lower() in by_suffix:
                         found.append(os.path.join(root, fname))
         else:
-            found.extend(sorted(glob.glob(path)) or [path])
+            matches = sorted(glob.glob(path))
+            if matches:
+                found.extend(matches)
+            elif os.path.exists(path):
+                found.append(path)
     return sorted(set(found))
 
 
@@ -45,6 +49,9 @@ def _load_runs(files: List[str]) -> tuple[list, list]:
         parser = by_suffix.get(suffix)
         if parser is None:
             errors.append(f"{path}: unsupported format '{suffix}'")
+            continue
+        if not os.path.exists(path):
+            errors.append(f"{path}: file not found")
             continue
         try:
             runs.append(parser(path))
@@ -97,14 +104,24 @@ def main(argv: List[str] | None = None) -> int:
 
     files = _discover(args.paths)
     if not files:
-        print("flakewatch: no report files found", file=sys.stderr)
+        print(
+            "flakewatch: no test report files found.\n"
+            "  I look for JUnit XML (.xml) files - give me a file, a glob, or a\n"
+            "  directory. Need to make one? Most frameworks can, for example:\n"
+            "      pytest --junitxml=report.xml",
+            file=sys.stderr,
+        )
         return 2
 
     runs, errors = _load_runs(files)
     for err in errors:
         print(f"flakewatch: warning: {err}", file=sys.stderr)
     if not runs:
-        print("flakewatch: no reports could be parsed", file=sys.stderr)
+        print(
+            f"flakewatch: none of the {len(files)} file(s) could be parsed.\n"
+            "  See the warnings above - is the file valid JUnit XML?",
+            file=sys.stderr,
+        )
         return 2
 
     stats = analyze(runs)

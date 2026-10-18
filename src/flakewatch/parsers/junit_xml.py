@@ -77,7 +77,10 @@ def parse_junit_xml(path: str) -> List[TestCase]:
     Handles the three common root shapes: ``<testsuites>`` (a bundle of
     suites), a bare ``<testsuite>``, and nested suites.
     """
-    root = ET.parse(path).getroot()
+    try:
+        root = ET.parse(path).getroot()
+    except ET.ParseError as exc:
+        raise ValueError(f"not valid XML ({exc})") from exc
     root_tag = _localname(root.tag)
 
     cases: List[TestCase] = []
