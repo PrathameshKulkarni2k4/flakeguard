@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="tests.test_checkout" tests="3" failures="2" errors="0" skipped="0">
+    <testcase classname="tests.test_checkout" name="test_adds_item" time="0.011"/>
+    <testcase classname="tests.test_checkout" name="test_applies_coupon" time="0.019">
+      <failure message="AssertionError: coupon discount not applied">AssertionError at line 88</failure>
+    </testcase>
+    <testcase classname="tests.test_checkout" name="test_totals_are_stable" time="0.030">
+      <failure message="AssertionError: expected 100 but got 98">AssertionError at line 42</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

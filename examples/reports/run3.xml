@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="tests.test_checkout" tests="3" failures="1" errors="0" skipped="0">
+    <testcase classname="tests.test_checkout" name="test_adds_item" time="0.010"/>
+    <testcase classname="tests.test_checkout" name="test_applies_coupon" time="0.018"/>
+    <testcase classname="tests.test_checkout" name="test_totals_are_stable" time="0.031">
+      <failure message="AssertionError: expected 100 but got 97">AssertionError at line 42</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

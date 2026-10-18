@@ -1,0 +1,40 @@
+# Example: run Flakewatch on every pull request.
+#
+# Copy this into your own repository as .github/workflows/flakewatch.yml,
+# then adjust the "Generate reports" step to run *your* test suite a few
+# times and collect JUnit XML into a directory.
+
+name: Flaky test check
+
+on:
+  pull_request:
+
+jobs:
+  flakewatch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # needed to post the report as a PR comment
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Produce test reports. Replace this with your real test command.
+      #    Running the suite several times is what makes flakiness visible.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Generate reports
+        run: |
+          pip install pytest
+          mkdir -p reports
+          for i in 1 2 3 4 5; do
+            pytest --junitxml="reports/run-$i.xml" || true
+          done
+
+      # 2. Analyse them and comment on the PR.
+      - name: Flakewatch
+        uses: ./
+        with:
+          reports: reports
+          min-runs: 3
+          max-flaky: 0 # fail the check if any flaky test is found
