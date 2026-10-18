@@ -1,5 +1,5 @@
-name: "Flakeguard"
-description: "Find, rank and report flaky tests from your JUnit XML reports."
+name: "Flakeguard - Flaky Test Detector"
+description: "Find, rank and report flaky tests from your JUnit XML or TAP reports."
 author: "Prathamesh Kulkarni"
 branding:
   icon: "activity"
