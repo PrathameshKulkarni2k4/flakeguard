@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Iterable, Optional
 
 
 class Outcome(str, Enum):
@@ -14,6 +14,20 @@ class Outcome(str, Enum):
     FAILED = "failed"
     ERROR = "error"
     SKIPPED = "skipped"
+
+
+def join_unique(parts: Iterable[str]) -> str:
+    """Join non-empty parts with '::', dropping repeats.
+
+    Frameworks disagree about how they name things: pytest sets a suite and
+    a classname, while jest-junit sets classname == name. Dropping repeats
+    keeps a test's identity stable and readable for both.
+    """
+    seen: list[str] = []
+    for part in parts:
+        if part and part not in seen:
+            seen.append(part)
+    return "::".join(seen)
 
 
 @dataclass(frozen=True)
@@ -38,21 +52,9 @@ class TestCase:
 
     @property
     def key(self) -> str:
-        """A stable identity for this test across runs.
-
-        We join whatever parts the framework gave us, skipping blanks and
-        collapsing a suite name that repeats the classname (common in
-        pytest/JUnit output), so the key stays readable.
-        """
-        head: list[str] = []
-        for part in (self.suite, self.classname):
-            if part and part not in head:
-                head.append(part)
-        if self.name:
-            head.append(self.name)
-        return "::".join(head) if head else "<unnamed>"
+        """A stable identity for this test across runs."""
+        return join_unique([self.suite, self.classname, self.name]) or "<unnamed>"
 
     @property
     def display_name(self) -> str:
-        parts = [p for p in (self.classname, self.name) if p]
-        return "::".join(parts) if parts else self.name or "<unnamed>"
+        return join_unique([self.classname, self.name]) or self.name or "<unnamed>"

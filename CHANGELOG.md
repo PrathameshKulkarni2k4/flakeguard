@@ -6,6 +6,17 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Test identity when a framework repeats the name in both `classname` and
+  `name` (e.g. jest-junit), which could otherwise merge distinct tests.
+- Clearer CLI errors when report files are missing or not valid JUnit XML.
+
+### Changed
+
+- Hardened the parser against real reports from pytest and jest-junit, with
+  regression fixtures captured from those tools.
+
 ## [0.1.0] - 2026-10-18
 
 ### Added

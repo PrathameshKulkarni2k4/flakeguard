@@ -15,7 +15,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional
 
-from .models import Outcome, TestCase
+from .models import Outcome, TestCase, join_unique
 
 
 @dataclass
@@ -47,8 +47,7 @@ class FlakeStats:
 
     @property
     def display_name(self) -> str:
-        parts = [p for p in (self.classname, self.name) if p]
-        return "::".join(parts) if parts else self.name or self.key
+        return join_unique([self.classname, self.name]) or self.name or self.key
 
     def is_flaky(self, min_score: float = 0.0) -> bool:
         """A test is flaky if it both passed and failed, and clears the bar."""
