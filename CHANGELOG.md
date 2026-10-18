@@ -6,6 +6,10 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- TAP report parser (Node's test runner, `tap`/`tape`, Perl Test::More).
+
 ### Fixed
 
 - Test identity when a framework repeats the name in both `classname` and

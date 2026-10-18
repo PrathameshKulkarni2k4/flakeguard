@@ -65,6 +65,10 @@ framework can produce. One tool, every language:
 | Ruby (RSpec) | the `rspec_junit_formatter` gem |
 | .NET, PHPUnit, … | built-in or plugin JUnit output |
 
+Flakeguard also reads **TAP** (the Test Anything Protocol), produced by
+Node's built-in test runner, the `tap`/`tape` libraries, Perl's Test::More
+and others.
+
 ## Use in CI (GitHub Actions)
 
 ```yaml
@@ -105,7 +109,8 @@ know exactly how it was derived.
 
 - [x] JUnit XML parsing, flakiness scoring, text/JSON/Markdown reports
 - [x] GitHub Action with PR comments and a flakiness budget
-- [ ] TAP and native JSON report formats
+- [x] TAP report format
+- [ ] Native JSON report formats
 - [ ] CI history so it learns across builds
 - [ ] Failure-signature clustering (group the *same* flake across tests)
 - [ ] Quarantine file so known flakes are set aside, not deleted
