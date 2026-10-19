@@ -158,9 +158,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if not files:
         print(
             "flakeguard: no test report files found.\n"
-            "  I look for JUnit XML (.xml) and TAP (.tap) files - give me a file,\n"
-            "  a glob, or a directory. Need to make one? Most frameworks can, e.g.\n"
-            "      pytest --junitxml=report.xml",
+            "  I read JUnit XML (.xml), TAP (.tap) and Jest-style JSON (.json) -\n"
+            "  give me a file, a glob, or a directory. Need to make one? e.g.\n"
+            "      pytest --junitxml=report.xml\n"
+            "      jest --json > report.json",
             file=sys.stderr,
         )
         return 2

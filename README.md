@@ -65,9 +65,9 @@ framework can produce. One tool, every language:
 | Ruby (RSpec) | the `rspec_junit_formatter` gem |
 | .NET, PHPUnit, … | built-in or plugin JUnit output |
 
-Flakeguard also reads **TAP** (the Test Anything Protocol), produced by
-Node's built-in test runner, the `tap`/`tape` libraries, Perl's Test::More
-and others.
+Flakeguard also reads **TAP** (the Test Anything Protocol — Node's built-in
+test runner, the `tap`/`tape` libraries, Perl's Test::More) and **Jest-style
+JSON** reports (`jest --json > report.json`).
 
 ## Use in CI (GitHub Actions)
 
@@ -149,15 +149,33 @@ Keep the file in your CI cache (or commit it) so it survives between builds.
 It keeps the most recent 30 runs by default — change that with
 `--history-keep N`.
 
+## Failure clusters
+
+When a suite has hundreds of flaky tests, they are usually a handful of root
+causes wearing different names — one flaky database, one slow network, one
+shared fixture. Flakeguard groups flakes whose failure messages look the
+same, so "200 flaky tests" reads as "2 causes":
+
+```
+failure clusters (2) - similar flakes, likely one cause:
+  4x  ConnectionRefusedError: Connection refused to <n>.<n>.<n>.<n>:<n>
+        tests.orders::test_create_order
+        tests.orders::test_update_order
+        ... and 2 more
+  2x  TimeoutError: request timed out after <n>s
+        tests.auth::test_login_flow
+        tests.auth::test_signup_flow
+```
+
 ## Roadmap
 
 - [x] JUnit XML parsing, flakiness scoring, text/JSON/Markdown reports
 - [x] GitHub Action with PR comments and a flakiness budget
 - [x] TAP report format
+- [x] Jest-style JSON report format
 - [x] Quarantine file so known flakes are set aside, not deleted
 - [x] CI history so it learns across builds
-- [ ] Native JSON report formats
-- [ ] Failure-signature clustering (group the *same* flake across tests)
+- [x] Failure-signature clustering (group the *same* flake across tests)
 
 ## Contributing
 

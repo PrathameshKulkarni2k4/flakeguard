@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Callable, List
 
 from ..models import TestCase
+from .json_report import parse_json_report
 from .junit_xml import parse_junit_xml
 from .tap import parse_tap
 
@@ -18,6 +19,7 @@ from .tap import parse_tap
 by_suffix: dict[str, Callable[[str], List[TestCase]]] = {
     ".xml": parse_junit_xml,
     ".tap": parse_tap,
+    ".json": parse_json_report,
 }
 
-__all__ = ["parse_junit_xml", "parse_tap", "by_suffix"]
+__all__ = ["parse_junit_xml", "parse_tap", "parse_json_report", "by_suffix"]

@@ -6,6 +6,16 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-19
+
+### Added
+
+- Jest-style JSON report parser (`.json`, `jest --json`). Test keys are made
+  relative to the suite directory so they stay stable across machines.
+- Failure-signature clustering: flaky tests that fail the same way are
+  grouped, so many flakes collapse into a few root causes. Shown in the
+  text and Markdown reports and as `clusters` in JSON.
+
 ## [0.4.0] - 2026-10-19
 
 ### Added
@@ -60,7 +70,8 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   flakiness budget.
 - Test suite, MIT license, and CI workflow.
 
-[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.1.0...v0.2.0

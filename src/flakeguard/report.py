@@ -5,8 +5,12 @@ from __future__ import annotations
 import json
 from typing import List, Sequence, Tuple
 
+from .clustering import Cluster, cluster
 from .quarantine import is_quarantined
 from .scoring import FlakeStats
+
+_MAX_CLUSTERS = 10
+_MAX_NAMES = 4
 
 
 def _bar(score: float, width: int = 10) -> str:
@@ -24,11 +28,20 @@ def _split(
     return new, quar
 
 
+def _clusters(new: List[FlakeStats], quar: List[FlakeStats]) -> List[Cluster]:
+    """Cluster all flaky tests - but only once there is more than one."""
+    flaky = new + quar
+    if len(flaky) < 2:
+        return []
+    return cluster(flaky)[:_MAX_CLUSTERS]
+
+
 def render_text(
     stats: Sequence[FlakeStats], min_runs: int, quarantine: Sequence[str] = ()
 ) -> str:
     """A human-readable terminal report."""
     new, quar = _split(stats, min_runs, quarantine)
+    clusters = _clusters(new, quar)
 
     lines: List[str] = [""]
     lines.append("flakeguard report")
@@ -55,13 +68,21 @@ def render_text(
             f"{s.passed:>4}  {s.failures:>4}  {s.display_name}"
         )
 
-    # The most recent failure of the worst new offender - what a developer
-    # actually wants to read.
     worst = new[0]
     if worst.last_message:
         lines.append("")
         lines.append(f"latest failure in {worst.display_name}:")
         lines.append(f"  {worst.last_message}")
+
+    if clusters:
+        lines.append("")
+        lines.append(f"failure clusters ({len(clusters)}) - similar flakes, likely one cause:")
+        for c in clusters:
+            lines.append(f"  {c.count}x  {c.display}")
+            for s in c.tests[:_MAX_NAMES]:
+                lines.append(f"        {s.display_name}")
+            if c.count > _MAX_NAMES:
+                lines.append(f"        ... and {c.count - _MAX_NAMES} more")
 
     if quar:
         lines.append("")
@@ -92,6 +113,7 @@ def render_json(
     stats: Sequence[FlakeStats], min_runs: int, quarantine: Sequence[str] = ()
 ) -> str:
     new, quar = _split(stats, min_runs, quarantine)
+    clusters = _clusters(new, quar)
     payload = {
         "schema_version": 2,
         "summary": {
@@ -103,6 +125,15 @@ def render_json(
         },
         "flaky_tests": [_stats_to_dict(s, False) for s in new]
         + [_stats_to_dict(s, True) for s in quar],
+        "clusters": [
+            {
+                "signature": c.signature,
+                "count": c.count,
+                "sample_message": c.sample_message,
+                "tests": [s.key for s in c.tests],
+            }
+            for c in clusters
+        ],
         "all_tests": [_stats_to_dict(s) for s in stats],
     }
     return json.dumps(payload, indent=2)
@@ -112,6 +143,7 @@ def render_markdown(
     stats: Sequence[FlakeStats], min_runs: int, quarantine: Sequence[str] = ()
 ) -> str:
     new, quar = _split(stats, min_runs, quarantine)
+    clusters = _clusters(new, quar)
     lines = ["## flakeguard report", ""]
 
     if not new:
@@ -128,6 +160,14 @@ def render_markdown(
         lines.append(
             f"| {s.score:.2f} | {s.considered} | {s.passed} | {s.failures} | `{s.display_name}` |"
         )
+
+    if clusters:
+        lines.extend(["", "### Failure clusters", ""])
+        lines.append("| tests | signature |")
+        lines.append("|------:|:----------|")
+        for c in clusters:
+            lines.append(f"| {c.count} | `{c.display}` |")
+
     if quar:
         lines.extend(["", f"_{len(quar)} known flake(s) quarantined._"])
     lines.append("")
