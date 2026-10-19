@@ -105,15 +105,37 @@ score = 2 * min(passes, failures) / (passes + failures)
 It is deliberately explainable — no black box. You can read the number and
 know exactly how it was derived.
 
+## Quarantine known flakes
+
+Once you've looked at a flaky test and decided "yes, we know about this one,"
+you don't want it failing CI forever — but you don't want to forget it either.
+Quarantine sets known flakes aside so **new** ones stand out.
+
+```bash
+# accept today's flakes as known
+flakeguard scan ./reports --update-quarantine
+
+# from now on: CI fails only on NEW flakes
+flakeguard scan ./reports --quarantine flakeguard-quarantine.txt --fail-on-flaky
+```
+
+The quarantine file is plain text — one glob pattern per line, so you can set
+aside a whole file of tests at once:
+
+```
+tests/checkout::test_applies_coupon
+tests/search::test_ranking_*
+```
+
 ## Roadmap
 
 - [x] JUnit XML parsing, flakiness scoring, text/JSON/Markdown reports
 - [x] GitHub Action with PR comments and a flakiness budget
 - [x] TAP report format
+- [x] Quarantine file so known flakes are set aside, not deleted
 - [ ] Native JSON report formats
 - [ ] CI history so it learns across builds
 - [ ] Failure-signature clustering (group the *same* flake across tests)
-- [ ] Quarantine file so known flakes are set aside, not deleted
 
 ## Contributing
 

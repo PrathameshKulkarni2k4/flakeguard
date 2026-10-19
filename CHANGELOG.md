@@ -6,6 +6,16 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-19
+
+### Added
+
+- Quarantine: a plain-text file of known-flaky tests (glob patterns).
+  `--quarantine FILE` sets them aside so only NEW flakes are reported;
+  `--update-quarantine` records the current flakes; `--fail-on-flaky` now
+  fails only on non-quarantined flakes. The GitHub Action gained a
+  `quarantine` input.
+
 ### Fixed
 
 - `flakeguard --version` now reports the real installed version, read from
@@ -41,6 +51,7 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   flakiness budget.
 - Test suite, MIT license, and CI workflow.
 
-[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/releases/tag/v0.1.0

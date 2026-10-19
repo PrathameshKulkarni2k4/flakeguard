@@ -19,9 +19,13 @@ inputs:
     required: false
     default: "0"
   max-flaky:
-    description: "Fail the job if more than this many flaky tests are found. Use -1 to never fail."
+    description: "Fail the job if more than this many NEW flaky tests are found. Use -1 to never fail."
     required: false
     default: "-1"
+  quarantine:
+    description: "Optional path to a quarantine file of known-flaky tests."
+    required: false
+    default: ""
   comment:
     description: "Post/update the report as a comment on pull requests."
     required: false
@@ -29,7 +33,7 @@ inputs:
 
 outputs:
   flaky-count:
-    description: "Number of flaky tests found."
+    description: "Number of NEW (non-quarantined) flaky tests found."
     value: ${{ steps.scan.outputs.flaky-count }}
   report-path:
     description: "Path to the generated Markdown report."
@@ -47,18 +51,22 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        QFLAG=""
+        if [ -n "${{ inputs.quarantine }}" ]; then
+          QFLAG="--quarantine ${{ inputs.quarantine }}"
+        fi
         flakeguard scan "${{ inputs.reports }}" \
           --min-runs "${{ inputs.min-runs }}" \
-          --min-score "${{ inputs.min-score }}" \
+          --min-score "${{ inputs.min-score }}" $QFLAG \
           --format markdown -o flakeguard-report.md
         flakeguard scan "${{ inputs.reports }}" \
           --min-runs "${{ inputs.min-runs }}" \
-          --min-score "${{ inputs.min-score }}" \
+          --min-score "${{ inputs.min-score }}" $QFLAG \
           --format json -o flakeguard-report.json
-        count=$(python -c "import json;print(json.load(open('flakeguard-report.json'))['summary']['flaky'])")
+        count=$(python -c "import json;print(json.load(open('flakeguard-report.json'))['summary']['new_flaky'])")
         echo "flaky-count=$count" >> "$GITHUB_OUTPUT"
         echo "report-path=flakeguard-report.md" >> "$GITHUB_OUTPUT"
-        echo "flakeguard found $count flaky test(s)"
+        echo "flakeguard found $count new flaky test(s)"
 
     - name: Comment on pull request
       if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
@@ -85,7 +93,7 @@ runs:
         count="${{ steps.scan.outputs.flaky-count }}"
         max="${{ inputs.max-flaky }}"
         if [ "$count" -gt "$max" ]; then
-          echo "::error::flakeguard found $count flaky tests, exceeding the budget of $max"
+          echo "::error::flakeguard found $count new flaky tests, exceeding the budget of $max"
           exit 1
         fi
-        echo "flakeguard: $count flaky test(s), within budget ($max)"
+        echo "flakeguard: $count new flaky test(s), within budget ($max)"

@@ -2,7 +2,8 @@
 
     flakeguard scan ./reports
     flakeguard scan run1.xml run2.xml run3.xml --format json
-    flakeguard scan ./ci-artifacts --min-runs 5 --min-score 0.2
+    flakeguard scan ./reports --quarantine flakeguard-quarantine.txt
+    flakeguard scan ./reports --update-quarantine
 """
 
 from __future__ import annotations
@@ -15,8 +16,11 @@ from typing import List
 
 from . import __version__
 from .parsers import by_suffix
+from .quarantine import is_quarantined, load_patterns, write_patterns
 from .report import RENDERERS
 from .scoring import analyze
+
+DEFAULT_QUARANTINE = "flakeguard-quarantine.txt"
 
 
 def _discover(paths: List[str]) -> List[str]:
@@ -92,9 +96,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", "-o", default=None, help="write the report to a file instead of stdout"
     )
     scan.add_argument(
+        "--quarantine",
+        metavar="FILE",
+        default=None,
+        help="file of glob patterns for known-flaky tests (one per line)",
+    )
+    scan.add_argument(
+        "--update-quarantine",
+        action="store_true",
+        help=(
+            "write every currently-flaky test to the quarantine file and exit 0 "
+            f"(default file: {DEFAULT_QUARANTINE})"
+        ),
+    )
+    scan.add_argument(
         "--fail-on-flaky",
         action="store_true",
-        help="exit with code 1 if any flaky tests are found (for CI gating)",
+        help="exit with code 1 if any NEW (non-quarantined) flaky tests are found",
     )
     return p
 
@@ -106,8 +124,8 @@ def main(argv: List[str] | None = None) -> int:
     if not files:
         print(
             "flakeguard: no test report files found.\n"
-            "  I look for JUnit XML (.xml) files - give me a file, a glob, or a\n"
-            "  directory. Need to make one? Most frameworks can, for example:\n"
+            "  I look for JUnit XML (.xml) and TAP (.tap) files - give me a file,\n"
+            "  a glob, or a directory. Need to make one? Most frameworks can, e.g.\n"
             "      pytest --junitxml=report.xml",
             file=sys.stderr,
         )
@@ -119,17 +137,27 @@ def main(argv: List[str] | None = None) -> int:
     if not runs:
         print(
             f"flakeguard: none of the {len(files)} file(s) could be parsed.\n"
-            "  See the warnings above - is the file valid JUnit XML?",
+            "  See the warnings above - is the file a valid report?",
             file=sys.stderr,
         )
         return 2
 
+    patterns: List[str] = []
+    if args.quarantine:
+        if os.path.exists(args.quarantine):
+            patterns = load_patterns(args.quarantine)
+        else:
+            print(
+                f"flakeguard: warning: quarantine file '{args.quarantine}' not found "
+                "(treating as empty)",
+                file=sys.stderr,
+            )
+
     stats = analyze(runs)
-    # Apply the minimum-score filter on top of the renderers' min-runs filter.
     if args.min_score > 0:
         stats = [s for s in stats if s.score >= args.min_score or not s.is_flaky()]
 
-    report = RENDERERS[args.format](stats, args.min_runs)
+    report = RENDERERS[args.format](stats, args.min_runs, patterns)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:
@@ -138,9 +166,20 @@ def main(argv: List[str] | None = None) -> int:
     else:
         print(report)
 
-    flaky_count = sum(1 for s in stats if s.is_flaky() and s.considered >= args.min_runs)
-    if args.fail_on_flaky and flaky_count > 0:
-        print(f"flakeguard: {flaky_count} flaky test(s) found", file=sys.stderr)
+    flaky = [s for s in stats if s.is_flaky() and s.considered >= args.min_runs]
+
+    if args.update_quarantine:
+        target = args.quarantine or DEFAULT_QUARANTINE
+        written = write_patterns(target, (s.key for s in flaky))
+        print(
+            f"flakeguard: wrote {written} test(s) to {target} - they are now quarantined",
+            file=sys.stderr,
+        )
+        return 0
+
+    new_flaky = [s for s in flaky if not is_quarantined(s.key, patterns)]
+    if args.fail_on_flaky and new_flaky:
+        print(f"flakeguard: {len(new_flaky)} new flaky test(s) found", file=sys.stderr)
         return 1
     return 0
 
