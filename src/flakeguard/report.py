@@ -84,12 +84,15 @@ def render_text(
         return "\n".join(lines)
 
     if new:
-        lines.append(f"{'score':>6}  {'bar':<10}  {'runs':>4}  {'pass':>4}  {'fail':>4}  test")
-        lines.append("-" * 60)
+        lines.append(
+            f"{'score':>6}  {'rate':>5}  {'bar':<10}  {'runs':>4}  "
+            f"{'pass':>4}  {'fail':>4}  test"
+        )
+        lines.append("-" * 74)
         for s in new:
             lines.append(
-                f"{s.score:>6.2f}  {_bar(s.score):<10}  {s.considered:>4}  "
-                f"{s.passed:>4}  {s.failures:>4}  {s.display_name}"
+                f"{s.score:>6.2f}  {s.rate * 100:>4.0f}%  {_bar(s.score):<10}  "
+                f"{s.considered:>4}  {s.passed:>4}  {s.failures:>4}  {s.display_name}"
             )
 
         worst = new[0]
@@ -144,6 +147,7 @@ def _stats_to_dict(s: FlakeStats, quarantined: bool = False) -> dict:
         "skipped": s.skipped,
         "flaky_retries": s.flaky_retries,
         "score": round(s.score, 4),
+        "rate": round(s.rate, 4),
         "quarantined": quarantined,
         "last_message": s.last_message,
     }
@@ -159,7 +163,7 @@ def render_json(
     clusters = _clusters(new, quar)
     unconfirmed = _unconfirmed(stats, min_runs)
     payload = {
-        "schema_version": 4,
+        "schema_version": 5,
         "summary": {
             "tests_analysed": len(stats),
             "flaky": len(new) + len(quar),
@@ -220,11 +224,12 @@ def render_markdown(
 
     lines.append(f"**{len(new)}** new flaky test(s) found across {len(stats)} analysed.")
     lines.append("")
-    lines.append("| score | runs | pass | fail | test |")
-    lines.append("|------:|-----:|-----:|-----:|:-----|")
+    lines.append("| score | rate | runs | pass | fail | test |")
+    lines.append("|------:|-----:|-----:|-----:|-----:|:-----|")
     for s in new:
         lines.append(
-            f"| {s.score:.2f} | {s.considered} | {s.passed} | {s.failures} | `{s.display_name}` |"
+            f"| {s.score:.2f} | {s.rate * 100:.0f}% | {s.considered} | "
+            f"{s.passed} | {s.failures} | `{s.display_name}` |"
         )
 
     if clusters:

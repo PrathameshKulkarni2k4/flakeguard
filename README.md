@@ -123,7 +123,15 @@ more than once - so flakeguard cannot tell a flake from a regression:
 **Retries are decisive.** If your runner retries a failing test and records
 it (Surefire's `<flakyFailure>`, and similar), flakeguard treats that as
 evidence on its own — a test that failed and then passed on retry is flaky
-whatever the history says.
+whatever the history says. The same goes for a runner that writes one
+`<testcase>` per retry attempt: a pass and a fail for one test inside a
+single run is a flake, not a hard failure.
+
+**Two numbers, because they answer two questions.** `score` says how *sure*
+we are a test is flaky (disagreement within a commit). `rate` says how
+*often* it misbehaves (the minority outcome across every run). A test that
+flaked once in a hundred runs is certainly flaky — but it is not as urgent
+as one that fails a third of the time, and a single number cannot say both.
 
 Give flakeguard a commit so it can tell a flake from a regression:
 
@@ -163,6 +171,10 @@ aside a whole file of tests at once:
 tests/checkout::test_applies_coupon
 tests/search::test_ranking_*
 ```
+
+Entries flakeguard adds are grouped under a dated header, so old ones get
+flagged for review (`--quarantine-max-age DAYS`, default 90). Otherwise a
+quarantined test that later breaks for real would stay hidden forever.
 
 ## Learn across builds (history)
 
@@ -214,6 +226,9 @@ Each entry is **one run**, and the reports it lists are merged into it — so a
 build that writes fifty class files is a single run, not fifty. Give each
 entry a commit and flakiness is judged within it, exactly as it should be.
 
+This is also how you express "three reruns, each of many class files": give
+each rerun its own entry.
+
 ## Failure clusters
 
 When a suite has hundreds of flaky tests, they are usually a handful of root
@@ -246,6 +261,7 @@ failure clusters (2) - similar flakes, likely one cause:
 - [x] Robustness fixes from code review: score dilution, quarantine escaping
       and merging, `--single-run`, commit-labelling warnings
 - [x] Declare runs and commits explicitly with a runs manifest
+- [x] Separate `score` (how sure) from `rate` (how often); quarantine aging
 
 ## Contributing
 

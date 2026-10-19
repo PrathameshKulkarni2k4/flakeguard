@@ -26,6 +26,10 @@ inputs:
     description: "Optional path to a quarantine file of known-flaky tests."
     required: false
     default: ""
+  single-run:
+    description: "Treat all report files as one run (Maven/Gradle write one XML per test class)."
+    required: false
+    default: "false"
   comment:
     description: "Post/update the report as a comment on pull requests."
     required: false
@@ -51,18 +55,28 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        # An array, so paths containing spaces survive intact.
+        # Arrays, so paths containing spaces survive intact.
         QFLAG=()
         if [ -n "${{ inputs.quarantine }}" ]; then
           QFLAG=(--quarantine "${{ inputs.quarantine }}")
         fi
+        SFLAG=()
+        if [ "${{ inputs.single-run }}" = "true" ]; then
+          SFLAG=(--single-run)
+        fi
+        # Pass the commit explicitly: it is the same for every file in this
+        # build, and saying so avoids the "applied to many files" warning.
         flakeguard scan "${{ inputs.reports }}" \
           --min-runs "${{ inputs.min-runs }}" \
-          --min-score "${{ inputs.min-score }}" "${QFLAG[@]}" \
+          --min-score "${{ inputs.min-score }}" \
+          --commit "${{ github.sha }}" \
+          "${QFLAG[@]}" "${SFLAG[@]}" \
           --format markdown -o flakeguard-report.md
         flakeguard scan "${{ inputs.reports }}" \
           --min-runs "${{ inputs.min-runs }}" \
-          --min-score "${{ inputs.min-score }}" "${QFLAG[@]}" \
+          --min-score "${{ inputs.min-score }}" \
+          --commit "${{ github.sha }}" \
+          "${QFLAG[@]}" "${SFLAG[@]}" \
           --format json -o flakeguard-report.json
         count=$(python -c "import json;print(json.load(open('flakeguard-report.json'))['summary']['new_flaky'])")
         echo "flaky-count=$count" >> "$GITHUB_OUTPUT"

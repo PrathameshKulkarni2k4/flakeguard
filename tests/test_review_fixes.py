@@ -90,11 +90,20 @@ def test_retry_flake_is_decisive_from_a_single_run():
 # --- minor: duplicate keys keep the most severe outcome ---------------------
 
 
-def test_duplicate_keys_in_a_run_keep_the_worst():
+def test_duplicate_keys_that_flip_collapse_to_a_flake():
+    # A pass and a fail for the same key in one run is a flake, whatever the
+    # runner's retry style.
     run = [case("dup", Outcome.PASSED), case("dup", Outcome.FAILED)]
     stats = analyze([run], ["A"])[0]
-    assert stats.failed == 1
-    assert stats.passed == 0
+    assert stats.flaky_retries == 1
+    assert stats.is_flaky()
+
+
+def test_duplicate_keys_keep_the_worst_when_not_a_flip():
+    run = [case("dup", Outcome.FAILED), case("dup", Outcome.ERROR)]
+    stats = analyze([run], ["A"])[0]
+    assert stats.errored == 1
+    assert stats.failed == 0
 
 
 # --- bug 4b: one build can write many files ---------------------------------

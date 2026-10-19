@@ -3,7 +3,7 @@
 Take every test, look at how it behaved across the runs we were given, and
 ask: *how often does it disagree with itself?*
 
-Two subtleties matter, and getting either wrong makes the score useless.
+Three subtleties matter, and getting any wrong makes the number useless.
 
 **A test can only be flaky on the same code.** A test that passed for twenty
 builds and then failed for twenty more is not flaky - a regression landed.
@@ -14,6 +14,13 @@ So when we know which commit each run came from, we only count disagreement
 test ran once can never show a flip, so including it would only dilute the
 score - and one-run-per-commit is the most common CI shape of all. Only
 commits with at least two decided runs count.
+
+**"How sure" and "how often" are different questions.** ``score`` answers
+the first (disagreement within a commit); ``rate`` answers the second (how
+often the test misbehaves across every run). A test that flaked once in a
+hundred runs is certainly flaky - but it is not as urgent as one that fails
+a third of the time. Reporting one number for both would lie about one of
+them.
 """
 
 from __future__ import annotations
@@ -21,17 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional, Sequence
 
-from .models import Outcome, TestCase
-
-# How bad each outcome is, used to pick the winner when a framework reports
-# the same test twice in one run.
-_SEVERITY = {
-    Outcome.SKIPPED: 0,
-    Outcome.PASSED: 1,
-    Outcome.FLAKY: 2,
-    Outcome.FAILED: 3,
-    Outcome.ERROR: 4,
-}
+from .models import Outcome, TestCase, collapse_run
 
 
 @dataclass
@@ -49,7 +46,10 @@ class FlakeStats:
     skipped: int = 0
     # Runs where the test failed and then passed on a retry.
     flaky_retries: int = 0
+    # How *sure* we are it is flaky: disagreement within a commit.
     score: float = 0.0
+    # How *often* it misbehaves: the minority outcome over every decided run.
+    rate: float = 0.0
     last_message: Optional[str] = None
     messages: List[str] = field(default_factory=list)
     # Distinct commits this test was seen on.
@@ -60,8 +60,13 @@ class FlakeStats:
 
     @property
     def considered(self) -> int:
-        """Runs that actually inform flakiness (passes + failures + errors)."""
-        return self.passed + self.failed + self.errored
+        """Runs that actually inform flakiness (everything but skips).
+
+        Derived from ``runs`` rather than summing the outcome counters: a
+        retry flake is recorded as both a pass and a failure, so summing them
+        would report 101 runs for 100 real ones.
+        """
+        return max(0, self.runs - self.skipped)
 
     @property
     def failures(self) -> int:
@@ -109,7 +114,7 @@ def analyze(
     runs: Iterable[Iterable[TestCase]],
     commits: Optional[Sequence[Optional[str]]] = None,
 ) -> List[FlakeStats]:
-    """Aggregate runs into per-test flake statistics, most-flaky first.
+    """Aggregate runs into per-test flake statistics, most frequent first.
 
     ``runs`` is an iterable of runs; each run is an iterable of
     :class:`TestCase`. ``commits`` is an optional parallel sequence of commit
@@ -129,15 +134,7 @@ def analyze(
     per_commit: dict[str, dict[Optional[str], List[int]]] = {}
 
     for commit, run in zip(commits, runs):
-        # If a framework reports the same key twice in one run, keep the most
-        # severe outcome - a second, failing variant must not be hidden.
-        per_run: dict[str, TestCase] = {}
-        for case in run:
-            previous = per_run.get(case.key)
-            if previous is None or _SEVERITY[case.outcome] > _SEVERITY[previous.outcome]:
-                per_run[case.key] = case
-
-        for case in per_run.values():
+        for case in collapse_run(run):
             key = case.key
             stats = agg.get(key)
             if stats is None:
@@ -159,7 +156,7 @@ def analyze(
                 stats.errored += 1
                 bucket[1] += 1
             elif case.outcome is Outcome.FLAKY:
-                # Failed then passed on retry: a flip we can see directly.
+                # Failed then passed within one run: a flip we can see directly.
                 stats.flaky_retries += 1
                 stats.passed += 1
                 stats.failed += 1
@@ -185,8 +182,13 @@ def analyze(
         decided = sum(passes + fails for passes, fails in informative)
         stats.score = min(1.0, 2.0 * flips / decided) if decided else 0.0
 
+        # Frequency over *every* decided run - deliberately not restricted to
+        # informative commits, because this answers "how often", not "how sure".
+        total = stats.considered
+        stats.rate = min(stats.passed, stats.failures) / total if total else 0.0
+
     return sorted(
         agg.values(),
-        key=lambda s: (s.score, s.failures, s.runs),
+        key=lambda s: (s.rate, s.score, s.failures),
         reverse=True,
     )

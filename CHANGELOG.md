@@ -6,6 +6,28 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-19
+
+### Fixed
+
+- A retry flake no longer inflates the run count (100 real runs were shown as
+  101) or claims a frequency it does not have. `rate` (how often) is now
+  reported alongside `score` (how sure), and tests are sorted by frequency.
+- A run that records the same test as both passed and failed - one
+  `<testcase>` per retry attempt - is now a flake, not a hard failure. The
+  collapse logic lives in one shared `collapse_run()` used by both scoring and
+  history, so they can no longer disagree: previously the same file gave
+  different answers with and without `--history`.
+- Quarantine entries never expired. Entries flakeguard adds are now dated, and
+  ones older than `--quarantine-max-age` (default 90 days) are flagged.
+- The Action now passes `--commit` explicitly, so it no longer trips its own
+  "commit applied to many files" warning on every run.
+
+### Added
+
+- `single-run` input on the Action, and `rate` in reports and JSON
+  (`schema_version` is now 5).
+
 ## [0.8.0] - 2026-10-19
 
 ### Added
@@ -132,7 +154,8 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   flakiness budget.
 - Test suite, MIT license, and CI workflow.
 
-[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.5.0...v0.6.0

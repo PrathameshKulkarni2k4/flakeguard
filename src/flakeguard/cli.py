@@ -20,7 +20,7 @@ from . import __version__
 from .history import History
 from .manifest import load_manifest
 from .parsers import by_suffix
-from .quarantine import is_quarantined, load_patterns, update_quarantine
+from .quarantine import is_quarantined, load_patterns, stale_patterns, update_quarantine
 from .report import RENDERERS
 from .scoring import analyze
 
@@ -223,6 +223,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     scan.add_argument(
+        "--quarantine-max-age",
+        type=int,
+        default=90,
+        metavar="DAYS",
+        help=(
+            "warn about quarantined tests added more than this many days ago, so "
+            "they get reviewed (default: 90; -1 disables)"
+        ),
+    )
+    scan.add_argument(
         "--history",
         metavar="FILE",
         default=None,
@@ -325,6 +335,16 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if args.quarantine:
         if os.path.exists(args.quarantine):
             patterns = load_patterns(args.quarantine)
+            stale = stale_patterns(args.quarantine, args.quarantine_max_age)
+            if stale:
+                print(
+                    f"flakeguard: {len(stale)} quarantined test(s) were added over "
+                    f"{args.quarantine_max_age} days ago - please review them. A test "
+                    "that broke for real would be hidden:",
+                    file=sys.stderr,
+                )
+                for pattern in stale[:5]:
+                    print(f"    {pattern}", file=sys.stderr)
         else:
             print(
                 f"flakeguard: warning: quarantine file '{args.quarantine}' not found "

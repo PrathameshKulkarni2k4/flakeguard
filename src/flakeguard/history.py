@@ -19,7 +19,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Iterable, List, Optional, Tuple
 
-from .models import Outcome, TestCase
+from .models import Outcome, TestCase, collapse_run
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -90,15 +90,12 @@ class History:
         )
         run_id = int(cur.lastrowid or 0)
 
-        rows, seen = [], set()
-        for case in cases:
-            if case.key in seen:
-                continue
-            seen.add(case.key)
-            rows.append(
-                (run_id, case.key, case.outcome.value, case.duration, case.message,
-                 case.name, case.suite, case.classname)
-            )
+        # Same collapse the scoring path uses, so the two cannot drift apart.
+        rows = [
+            (run_id, case.key, case.outcome.value, case.duration, case.message,
+             case.name, case.suite, case.classname)
+            for case in collapse_run(cases)
+        ]
         cur.executemany(_INSERT, rows)
         self._conn.commit()
         return run_id
