@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import List, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from .clustering import Cluster, cluster
 from .quarantine import is_quarantined
@@ -37,7 +37,10 @@ def _clusters(new: List[FlakeStats], quar: List[FlakeStats]) -> List[Cluster]:
 
 
 def render_text(
-    stats: Sequence[FlakeStats], min_runs: int, quarantine: Sequence[str] = ()
+    stats: Sequence[FlakeStats],
+    min_runs: int,
+    quarantine: Sequence[str] = (),
+    commits: Optional[int] = None,
 ) -> str:
     """A human-readable terminal report."""
     new, quar = _split(stats, min_runs, quarantine)
@@ -50,6 +53,10 @@ def render_text(
     lines.append(f"new flaky      : {len(new)}")
     if quarantine:
         lines.append(f"quarantined    : {len(quar)}")
+    if commits:
+        lines.append(f"scored within  : {commits} commit(s)")
+    else:
+        lines.append("scored within  : all runs pooled (no commit info)")
     lines.append("")
 
     if not new:
@@ -110,17 +117,21 @@ def _stats_to_dict(s: FlakeStats, quarantined: bool = False) -> dict:
 
 
 def render_json(
-    stats: Sequence[FlakeStats], min_runs: int, quarantine: Sequence[str] = ()
+    stats: Sequence[FlakeStats],
+    min_runs: int,
+    quarantine: Sequence[str] = (),
+    commits: Optional[int] = None,
 ) -> str:
     new, quar = _split(stats, min_runs, quarantine)
     clusters = _clusters(new, quar)
     payload = {
-        "schema_version": 2,
+        "schema_version": 3,
         "summary": {
             "tests_analysed": len(stats),
             "flaky": len(new) + len(quar),
             "new_flaky": len(new),
             "quarantined": len(quar),
+            "commits": commits,
             "min_runs": min_runs,
         },
         "flaky_tests": [_stats_to_dict(s, False) for s in new]
@@ -140,11 +151,16 @@ def render_json(
 
 
 def render_markdown(
-    stats: Sequence[FlakeStats], min_runs: int, quarantine: Sequence[str] = ()
+    stats: Sequence[FlakeStats],
+    min_runs: int,
+    quarantine: Sequence[str] = (),
+    commits: Optional[int] = None,
 ) -> str:
     new, quar = _split(stats, min_runs, quarantine)
     clusters = _clusters(new, quar)
     lines = ["## flakeguard report", ""]
+    if commits:
+        lines.extend([f"_Scored within {commits} commit(s)._", ""])
 
     if not new:
         lines.append("No new flaky tests found." if quar else "No flaky tests found.")

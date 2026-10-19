@@ -92,15 +92,31 @@ flakeguard scan ./reports --fail-on-flaky   # exits 1 if anything is flaky
 
 ## How the score works
 
-For each test we count passes vs. non-passes across all runs (skips are
-ignored). The flakiness score is:
+**A test can only be flaky on the same code.** That is the whole idea. If a
+test passed for twenty builds and then failed for twenty more, a regression
+landed — it is not flaky, and calling it flaky is how real bugs get ignored.
+So flakeguard counts disagreement *within* a commit:
 
 ```
-score = 2 * min(passes, failures) / (passes + failures)
+score = 2 * Σ(per-commit flips) / Σ(per-commit decided runs)
 ```
 
 - always passes, or always fails → **0.0** (consistent, *not* flaky)
-- flips on every run (50/50) → **1.0** (maximally flaky)
+- flips on every run of the same commit → **1.0** (maximally flaky)
+
+Give flakeguard a commit so it can tell a flake from a regression:
+
+```bash
+flakeguard scan ./reports --commit "$GITHUB_SHA"
+```
+
+It also picks one up automatically from `GITHUB_SHA`, `CI_COMMIT_SHA`,
+`GIT_COMMIT` and `CIRCLE_SHA1`, so most CI setups get this for free.
+
+**Without commit information** flakeguard falls back to pooling every run.
+That still finds real flakes, but it *cannot* distinguish a flake from a
+regression — so it says so, in the report and on stderr, rather than
+pretending to be sure.
 
 It is deliberately explainable — no black box. You can read the number and
 know exactly how it was derived.
@@ -149,6 +165,10 @@ Keep the file in your CI cache (or commit it) so it survives between builds.
 It keeps the most recent 30 runs by default — change that with
 `--history-keep N`.
 
+Each run also records the **commit** it came from (from `--commit`, or your
+CI's environment). That matters as history grows: without it, a regression
+that landed months ago would look like a flake.
+
 ## Failure clusters
 
 When a suite has hundreds of flaky tests, they are usually a handful of root
@@ -176,6 +196,9 @@ failure clusters (2) - similar flakes, likely one cause:
 - [x] Quarantine file so known flakes are set aside, not deleted
 - [x] CI history so it learns across builds
 - [x] Failure-signature clustering (group the *same* flake across tests)
+- [x] Commit-aware scoring (a regression is not a flake)
+- [ ] Retry awareness — a test that fails then passes on retry within one
+      run is the strongest flake signal there is
 
 ## Contributing
 

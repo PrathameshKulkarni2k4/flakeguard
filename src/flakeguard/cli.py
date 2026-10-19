@@ -1,7 +1,7 @@
 """Command-line entry point.
 
     flakeguard scan ./reports
-    flakeguard scan run1.xml run2.xml run3.xml --format json
+    flakeguard scan ./reports --commit "$GITHUB_SHA"
     flakeguard scan ./reports --quarantine flakeguard-quarantine.txt
     flakeguard scan ./reports --history .flakeguard/history.db
     flakeguard history .flakeguard/history.db
@@ -13,7 +13,7 @@ import argparse
 import glob
 import os
 import sys
-from typing import List
+from typing import List, Optional
 
 from . import __version__
 from .history import History
@@ -23,6 +23,27 @@ from .report import RENDERERS
 from .scoring import analyze
 
 DEFAULT_QUARANTINE = "flakeguard-quarantine.txt"
+
+# Environment variables we'll read a commit from, if the user doesn't pass one.
+_COMMIT_ENV = (
+    "FLAKEGUARD_COMMIT",
+    "GITHUB_SHA",
+    "CI_COMMIT_SHA",
+    "GIT_COMMIT",
+    "BUILD_SOURCEVERSION",
+    "CIRCLE_SHA1",
+)
+
+
+def _detect_commit(explicit: Optional[str]) -> Optional[str]:
+    """The commit for this run: explicit flag, else a common CI variable."""
+    if explicit:
+        return explicit
+    for name in _COMMIT_ENV:
+        value = os.environ.get(name)
+        if value:
+            return value
+    return None
 
 
 def _discover(paths: List[str]) -> List[str]:
@@ -98,6 +119,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", "-o", default=None, help="write the report to a file instead of stdout"
     )
     scan.add_argument(
+        "--commit",
+        metavar="SHA",
+        default=None,
+        help=(
+            "commit these results belong to. Flakiness is only counted within a "
+            "commit, so a regression is not mistaken for a flake. Falls back to "
+            "GITHUB_SHA / CI_COMMIT_SHA / GIT_COMMIT if not given"
+        ),
+    )
+    scan.add_argument(
         "--quarantine",
         metavar="FILE",
         default=None,
@@ -150,6 +181,7 @@ def _cmd_history(args: argparse.Namespace) -> int:
         print(f"history file  : {args.path}")
         print(f"runs stored   : {hist.run_count()}")
         print(f"distinct tests: {hist.test_count()}")
+        print(f"commits       : {hist.commit_count()}")
     return 0
 
 
@@ -177,6 +209,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         )
         return 2
 
+    commit = _detect_commit(args.commit)
+
     patterns: List[str] = []
     if args.quarantine:
         if os.path.exists(args.quarantine):
@@ -189,22 +223,41 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             )
 
     # With a history file, remember this run and analyse everything stored.
-    analysis_runs = runs
     if args.history:
         with History(args.history) as hist:
             for run in runs:
-                hist.add_run(run)
+                hist.add_run(run, commit=commit)
             pruned = hist.prune(args.history_keep)
             if pruned:
                 print(f"flakeguard: pruned {pruned} old run(s) from history", file=sys.stderr)
-            analysis_runs = hist.load_runs()
+            stored = hist.load_runs()
             print(f"flakeguard: history has {hist.run_count()} run(s)", file=sys.stderr)
+        analysis_commits = [c for c, _ in stored]
+        analysis_runs = [r for _, r in stored]
+    else:
+        analysis_runs = runs
+        analysis_commits = [commit] * len(runs)
 
-    stats = analyze(analysis_runs)
+    known_commits = {c for c in analysis_commits if c}
+    commit_count = len(known_commits) or None
+    if commit_count:
+        print(
+            f"flakeguard: scoring within {commit_count} commit(s) - "
+            "disagreement across commits is a regression, not a flake",
+            file=sys.stderr,
+        )
+    elif len(analysis_runs) > 1:
+        print(
+            "flakeguard: no commit information, so runs are pooled - a regression "
+            "could look flaky. Pass --commit (or use --history) for accuracy.",
+            file=sys.stderr,
+        )
+
+    stats = analyze(analysis_runs, analysis_commits)
     if args.min_score > 0:
         stats = [s for s in stats if s.score >= args.min_score or not s.is_flaky()]
 
-    report = RENDERERS[args.format](stats, args.min_runs, patterns)
+    report = RENDERERS[args.format](stats, args.min_runs, patterns, commit_count)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:

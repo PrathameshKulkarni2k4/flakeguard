@@ -6,6 +6,25 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-19
+
+### Changed
+
+- **Flakiness is now scored within a commit.** Previously every run was
+  pooled, so a test that passed for 20 builds and then failed for 20 after a
+  real change scored 1.0 and was reported as "maximally flaky" - a
+  regression mistaken for a flake, which is exactly the problem the tool
+  exists to prevent. The score is now
+  `2 * Σ(per-commit flips) / Σ(per-commit decided runs)`, which reduces to
+  the old formula when only one commit is involved.
+
+### Added
+
+- `--commit SHA` (and automatic detection from `GITHUB_SHA`,
+  `CI_COMMIT_SHA`, `GIT_COMMIT`, `CIRCLE_SHA1`, ...). History records the
+  commit per run. Reports state whether scoring was commit-aware, and warn
+  on stderr when runs are pooled. JSON `schema_version` is now 3.
+
 ## [0.5.0] - 2026-10-19
 
 ### Added
@@ -70,7 +89,8 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   flakiness budget.
 - Test suite, MIT license, and CI workflow.
 
-[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.2.0...v0.3.0

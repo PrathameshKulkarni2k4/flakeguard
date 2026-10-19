@@ -1,21 +1,24 @@
 """The heart of flakeguard: turning many runs into a flakiness score.
 
-The idea is simple and explainable. Take every test, look at how it
-behaved across all the runs we were given, and ask: *how often does it
-disagree with itself?*
+Take every test, look at how it behaved across the runs we were given, and
+ask: *how often does it disagree with itself?*
 
-We ignore skips (a skipped test tells us nothing about flakiness) and
-count only passes vs. non-passes. A test that always passes, or always
-fails, is **not flaky** - it is consistent. Flakiness is disagreement.
+The crucial subtlety is that a test can only be flaky **on the same code**. A
+test that passed for twenty builds and then failed for twenty more is not
+flaky - a real regression landed. So when we know which commit each run came
+from, we only count disagreement *within* a commit.
+
+Without commit information we fall back to pooling every run, which is a
+weaker signal - it cannot tell a flake from a regression - so callers should
+pass commits whenever they can.
 """
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, Sequence
 
-from .models import Outcome, TestCase, join_unique
+from .models import Outcome, TestCase
 
 
 @dataclass
@@ -34,6 +37,8 @@ class FlakeStats:
     score: float = 0.0
     last_message: Optional[str] = None
     messages: List[str] = field(default_factory=list)
+    # How many distinct commits this test was seen on (1 when unknown).
+    commit_groups: int = 0
 
     @property
     def considered(self) -> int:
@@ -47,7 +52,8 @@ class FlakeStats:
 
     @property
     def display_name(self) -> str:
-        return join_unique([self.classname, self.name]) or self.name or self.key
+        parts = [p for p in (self.classname, self.name) if p]
+        return "::".join(parts) if parts else self.name or self.key
 
     def is_flaky(self, min_score: float = 0.0) -> bool:
         """A test is flaky if it both passed and failed, and clears the bar."""
@@ -55,15 +61,12 @@ class FlakeStats:
 
 
 def _score(passed: int, failures: int) -> float:
-    """Flakiness score in [0, 1].
+    """Flakiness score in [0, 1] for a single commit.
 
-    Defined as ``2 * min(passes, failures) / (passes + failures)``.
+    ``2 * min(passes, failures) / (passes + failures)``:
 
-    * all passes, or all failures  -> 0.0  (consistent, not flaky)
-    * perfectly alternating 50/50  -> 1.0  (maximally flaky)
-
-    Doubling means the score reads the way people expect: a coin-flip test
-    is "100% flaky", not "50% flaky".
+    * all passes, or all failures -> 0.0 (consistent, not flaky)
+    * perfectly alternating 50/50 -> 1.0 (maximally flaky)
     """
     total = passed + failures
     if total == 0:
@@ -71,16 +74,31 @@ def _score(passed: int, failures: int) -> float:
     return min(1.0, 2.0 * min(passed, failures) / total)
 
 
-def analyze(runs: Iterable[Iterable[TestCase]]) -> List[FlakeStats]:
-    """Aggregate several runs of test cases into per-test flake statistics.
+def analyze(
+    runs: Iterable[Iterable[TestCase]],
+    commits: Optional[Sequence[Optional[str]]] = None,
+) -> List[FlakeStats]:
+    """Aggregate runs into per-test flake statistics, most-flaky first.
 
     ``runs`` is an iterable of runs; each run is an iterable of
-    :class:`TestCase`. Returns stats for every distinct test seen, sorted
-    most-flaky first.
+    :class:`TestCase`. ``commits`` is an optional parallel sequence of commit
+    labels (git SHAs, build numbers - anything stable). When supplied,
+    flakiness is judged *within* each commit, so a regression (consistent
+    failure after a change) is not mistaken for a flake.
     """
-    agg: dict[str, FlakeStats] = {}
+    runs = list(runs)
+    if commits is None:
+        commits = [None] * len(runs)
+    else:
+        commits = list(commits)
+        if len(commits) != len(runs):
+            raise ValueError("commits and runs must have the same length")
 
-    for run in runs:
+    agg: dict[str, FlakeStats] = {}
+    # key -> commit -> [passes, failures] within that commit
+    per_commit: dict[str, dict[Optional[str], List[int]]] = {}
+
+    for commit, run in zip(commits, runs):
         seen_in_run: set[str] = set()
         for case in run:
             key = case.key
@@ -112,8 +130,19 @@ def analyze(runs: Iterable[Iterable[TestCase]]) -> List[FlakeStats]:
                 if case.message not in stats.messages:
                     stats.messages.append(case.message)
 
-    for stats in agg.values():
-        stats.score = _score(stats.passed, stats.failures)
+            bucket = per_commit.setdefault(key, {}).setdefault(commit, [0, 0])
+            if case.outcome is Outcome.PASSED:
+                bucket[0] += 1
+            elif case.outcome in (Outcome.FAILED, Outcome.ERROR):
+                bucket[1] += 1
+
+    for key, stats in agg.items():
+        groups = per_commit.get(key, {})
+        stats.commit_groups = len(groups)
+        # Disagreement *within* a commit is the only real flakiness signal.
+        flips = sum(min(passes, fails) for passes, fails in groups.values())
+        decided = sum(passes + fails for passes, fails in groups.values())
+        stats.score = min(1.0, 2.0 * flips / decided) if decided else 0.0
 
     return sorted(
         agg.values(),

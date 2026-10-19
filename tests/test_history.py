@@ -23,8 +23,20 @@ def test_add_and_load_round_trip(tmp_path):
         runs = h.load_runs()
 
     assert len(runs) == 2
-    assert runs[0][0].name == "a"
-    assert runs[1][1].outcome is Outcome.PASSED
+    _, first = runs[0]
+    assert first[0].name == "a"
+    _, second = runs[1]
+    assert second[1].outcome is Outcome.PASSED
+
+
+def test_commit_is_stored_and_loaded(tmp_path):
+    db = str(tmp_path / "h.db")
+    with History(db) as h:
+        h.add_run([case("a", Outcome.PASSED)], commit="abc123")
+        h.add_run([case("a", Outcome.FAILED)], commit="def456")
+        assert h.commit_count() == 2
+        stored = h.load_runs()
+    assert [c for c, _ in stored] == ["abc123", "def456"]
 
 
 def test_prune_keeps_newest(tmp_path):
