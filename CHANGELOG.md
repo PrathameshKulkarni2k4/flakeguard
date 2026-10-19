@@ -6,6 +6,39 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-19
+
+### Fixed
+
+- **Score diluted by single-run commits.** A commit that ran a test once can
+  never show a flip, so it only inflated the denominator: a real flake with
+  one informative commit among 30 scored 0.06 instead of 0.67, and a test
+  failing ~20% of the time with one run per commit scored 0.0 and was never
+  flagged. Only commits with two or more decided runs now count.
+- Quarantine patterns for parametrised tests (`test_x[1-2]`) never matched -
+  `fnmatch` read the brackets as a character class. Keys are now escaped.
+- `--update-quarantine` overwrote the whole file, deleting hand-written globs
+  and comments. It now merges and preserves what is already there.
+- Surefire `<flakyFailure>` / `<rerunFailure>` were parsed as passes, throwing
+  away the strongest flake signal there is. They are now `FLAKY`, and count as
+  decisive evidence on their own.
+- An auto-detected `GITHUB_SHA` applied to several report files could label
+  runs from different builds as one commit, hiding regressions. It now warns.
+- Duplicate keys within a run kept the first outcome, hiding a failing second
+  variant; the most severe outcome now wins.
+- `action.yml` expanded `$QFLAG` unquoted, breaking paths containing spaces.
+
+### Added
+
+- Tests that changed across commits but were never run twice on one commit
+  are reported as **unconfirmed** rather than silently scoring 0.
+- `--single-run` merges many report files into one run (Maven and Gradle
+  Surefire write one XML per test class).
+
+### Changed
+
+- JSON `schema_version` is now 4; each test carries `flaky_retries`.
+
 ## [0.6.0] - 2026-10-19
 
 ### Changed
@@ -89,7 +122,8 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   flakiness budget.
 - Test suite, MIT license, and CI workflow.
 
-[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.3.0...v0.4.0

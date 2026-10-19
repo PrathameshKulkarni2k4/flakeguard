@@ -3,14 +3,17 @@
 Take every test, look at how it behaved across the runs we were given, and
 ask: *how often does it disagree with itself?*
 
-The crucial subtlety is that a test can only be flaky **on the same code**. A
-test that passed for twenty builds and then failed for twenty more is not
-flaky - a real regression landed. So when we know which commit each run came
-from, we only count disagreement *within* a commit.
+Two subtleties matter, and getting either wrong makes the score useless.
 
-Without commit information we fall back to pooling every run, which is a
-weaker signal - it cannot tell a flake from a regression - so callers should
-pass commits whenever they can.
+**A test can only be flaky on the same code.** A test that passed for twenty
+builds and then failed for twenty more is not flaky - a regression landed.
+So when we know which commit each run came from, we only count disagreement
+*within* a commit.
+
+**A commit needs more than one run to say anything.** A commit where the
+test ran once can never show a flip, so including it would only dilute the
+score - and one-run-per-commit is the most common CI shape of all. Only
+commits with at least two decided runs count.
 """
 
 from __future__ import annotations
@@ -19,6 +22,16 @@ from dataclasses import dataclass, field
 from typing import Iterable, List, Optional, Sequence
 
 from .models import Outcome, TestCase
+
+# How bad each outcome is, used to pick the winner when a framework reports
+# the same test twice in one run.
+_SEVERITY = {
+    Outcome.SKIPPED: 0,
+    Outcome.PASSED: 1,
+    Outcome.FLAKY: 2,
+    Outcome.FAILED: 3,
+    Outcome.ERROR: 4,
+}
 
 
 @dataclass
@@ -34,11 +47,16 @@ class FlakeStats:
     failed: int = 0
     errored: int = 0
     skipped: int = 0
+    # Runs where the test failed and then passed on a retry.
+    flaky_retries: int = 0
     score: float = 0.0
     last_message: Optional[str] = None
     messages: List[str] = field(default_factory=list)
-    # How many distinct commits this test was seen on (1 when unknown).
+    # Distinct commits this test was seen on.
     commit_groups: int = 0
+    # Commits where it decided more than once - the only ones that can show
+    # flakiness.
+    informative_commits: int = 0
 
     @property
     def considered(self) -> int:
@@ -58,6 +76,19 @@ class FlakeStats:
     def is_flaky(self, min_score: float = 0.0) -> bool:
         """A test is flaky if it both passed and failed, and clears the bar."""
         return self.passed > 0 and self.failures > 0 and self.score > min_score
+
+    def is_unconfirmed(self) -> bool:
+        """Changed across commits, but no commit ran it twice.
+
+        We can see it behaved differently, but we cannot tell a flake from a
+        regression - so we say so rather than guess.
+        """
+        return (
+            self.passed > 0
+            and self.failures > 0
+            and self.informative_commits == 0
+            and self.flaky_retries == 0
+        )
 
 
 def _score(passed: int, failures: int) -> float:
@@ -82,9 +113,8 @@ def analyze(
 
     ``runs`` is an iterable of runs; each run is an iterable of
     :class:`TestCase`. ``commits`` is an optional parallel sequence of commit
-    labels (git SHAs, build numbers - anything stable). When supplied,
-    flakiness is judged *within* each commit, so a regression (consistent
-    failure after a change) is not mistaken for a flake.
+    labels. When supplied, flakiness is judged *within* each commit, so a
+    regression is not mistaken for a flake.
     """
     runs = list(runs)
     if commits is None:
@@ -95,19 +125,20 @@ def analyze(
             raise ValueError("commits and runs must have the same length")
 
     agg: dict[str, FlakeStats] = {}
-    # key -> commit -> [passes, failures] within that commit
+    # key -> commit -> [passes, failures] decided within that commit
     per_commit: dict[str, dict[Optional[str], List[int]]] = {}
 
     for commit, run in zip(commits, runs):
-        seen_in_run: set[str] = set()
+        # If a framework reports the same key twice in one run, keep the most
+        # severe outcome - a second, failing variant must not be hidden.
+        per_run: dict[str, TestCase] = {}
         for case in run:
-            key = case.key
-            # If a framework reports the same key twice in one run (e.g.
-            # parametrised tests without unique names) count it once.
-            if key in seen_in_run:
-                continue
-            seen_in_run.add(key)
+            previous = per_run.get(case.key)
+            if previous is None or _SEVERITY[case.outcome] > _SEVERITY[previous.outcome]:
+                per_run[case.key] = case
 
+        for case in per_run.values():
+            key = case.key
             stats = agg.get(key)
             if stats is None:
                 stats = FlakeStats(
@@ -116,12 +147,24 @@ def analyze(
                 agg[key] = stats
 
             stats.runs += 1
+            bucket = per_commit.setdefault(key, {}).setdefault(commit, [0, 0])
+
             if case.outcome is Outcome.PASSED:
                 stats.passed += 1
+                bucket[0] += 1
             elif case.outcome is Outcome.FAILED:
                 stats.failed += 1
+                bucket[1] += 1
             elif case.outcome is Outcome.ERROR:
                 stats.errored += 1
+                bucket[1] += 1
+            elif case.outcome is Outcome.FLAKY:
+                # Failed then passed on retry: a flip we can see directly.
+                stats.flaky_retries += 1
+                stats.passed += 1
+                stats.failed += 1
+                bucket[0] += 1
+                bucket[1] += 1
             else:
                 stats.skipped += 1
 
@@ -130,18 +173,16 @@ def analyze(
                 if case.message not in stats.messages:
                     stats.messages.append(case.message)
 
-            bucket = per_commit.setdefault(key, {}).setdefault(commit, [0, 0])
-            if case.outcome is Outcome.PASSED:
-                bucket[0] += 1
-            elif case.outcome in (Outcome.FAILED, Outcome.ERROR):
-                bucket[1] += 1
-
     for key, stats in agg.items():
         groups = per_commit.get(key, {})
         stats.commit_groups = len(groups)
-        # Disagreement *within* a commit is the only real flakiness signal.
-        flips = sum(min(passes, fails) for passes, fails in groups.values())
-        decided = sum(passes + fails for passes, fails in groups.values())
+        # Only commits with at least two decided runs can show a flip. A
+        # single run per commit can never disagree with itself, so counting
+        # it would just dilute the score.
+        informative = [(p, f) for p, f in groups.values() if p + f >= 2]
+        stats.informative_commits = len(informative)
+        flips = sum(min(passes, fails) for passes, fails in informative)
+        decided = sum(passes + fails for passes, fails in informative)
         stats.score = min(1.0, 2.0 * flips / decided) if decided else 0.0
 
     return sorted(

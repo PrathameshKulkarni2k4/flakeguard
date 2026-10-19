@@ -18,7 +18,7 @@ from typing import List, Optional
 from . import __version__
 from .history import History
 from .parsers import by_suffix
-from .quarantine import is_quarantined, load_patterns, write_patterns
+from .quarantine import is_quarantined, load_patterns, update_quarantine
 from .report import RENDERERS
 from .scoring import analyze
 
@@ -35,15 +35,19 @@ _COMMIT_ENV = (
 )
 
 
-def _detect_commit(explicit: Optional[str]) -> Optional[str]:
-    """The commit for this run: explicit flag, else a common CI variable."""
+def _detect_commit(explicit: Optional[str]):
+    """The commit for this run: explicit flag, else a common CI variable.
+
+    Returns ``(commit, source)`` so the caller can warn when a value guessed
+    from the environment is applied to several report files at once.
+    """
     if explicit:
-        return explicit
+        return explicit, "flag"
     for name in _COMMIT_ENV:
         value = os.environ.get(name)
         if value:
-            return value
-    return None
+            return value, f"env:{name}"
+    return None, None
 
 
 def _discover(paths: List[str]) -> List[str]:
@@ -158,6 +162,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="maximum number of runs to keep in the history file (default: 30)",
     )
     scan.add_argument(
+        "--single-run",
+        action="store_true",
+        help=(
+            "treat every report file as part of ONE run. Use this when a single "
+            "build writes many files - Maven and Gradle Surefire write one XML "
+            "per test class"
+        ),
+    )
+    scan.add_argument(
         "--fail-on-flaky",
         action="store_true",
         help="exit with code 1 if any NEW (non-quarantined) flaky tests are found",
@@ -209,7 +222,23 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         )
         return 2
 
-    commit = _detect_commit(args.commit)
+    commit, commit_source = _detect_commit(args.commit)
+
+    if args.single_run and len(runs) > 1:
+        print(
+            f"flakeguard: --single-run: treating {len(runs)} file(s) as one run",
+            file=sys.stderr,
+        )
+        runs = [[case for run in runs for case in run]]
+
+    if commit_source and commit_source.startswith("env:") and len(runs) > 1:
+        print(
+            f"flakeguard: warning: {commit_source.split(':', 1)[1]} is set, so all "
+            f"{len(runs)} report file(s) were labelled with the same commit "
+            f"({commit}). If they come from different builds that hides "
+            "regressions - pass --commit explicitly, or scan one build at a time.",
+            file=sys.stderr,
+        )
 
     patterns: List[str] = []
     if args.quarantine:
@@ -270,9 +299,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
     if args.update_quarantine:
         target = args.quarantine or DEFAULT_QUARANTINE
-        written = write_patterns(target, (s.key for s in flaky))
+        added = update_quarantine(target, (s.key for s in flaky))
         print(
-            f"flakeguard: wrote {written} test(s) to {target} - they are now quarantined",
+            f"flakeguard: added {added} test(s) to {target} (existing entries kept)",
             file=sys.stderr,
         )
         return 0

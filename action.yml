@@ -51,17 +51,18 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        QFLAG=""
+        # An array, so paths containing spaces survive intact.
+        QFLAG=()
         if [ -n "${{ inputs.quarantine }}" ]; then
-          QFLAG="--quarantine ${{ inputs.quarantine }}"
+          QFLAG=(--quarantine "${{ inputs.quarantine }}")
         fi
         flakeguard scan "${{ inputs.reports }}" \
           --min-runs "${{ inputs.min-runs }}" \
-          --min-score "${{ inputs.min-score }}" $QFLAG \
+          --min-score "${{ inputs.min-score }}" "${QFLAG[@]}" \
           --format markdown -o flakeguard-report.md
         flakeguard scan "${{ inputs.reports }}" \
           --min-runs "${{ inputs.min-runs }}" \
-          --min-score "${{ inputs.min-score }}" $QFLAG \
+          --min-score "${{ inputs.min-score }}" "${QFLAG[@]}" \
           --format json -o flakeguard-report.json
         count=$(python -c "import json;print(json.load(open('flakeguard-report.json'))['summary']['new_flaky'])")
         echo "flaky-count=$count" >> "$GITHUB_OUTPUT"

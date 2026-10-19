@@ -13,39 +13,50 @@ from typing import Iterator, List, Optional, Tuple
 
 from ..models import Outcome, TestCase
 
+# Children that mean "the test failed but then passed on a retry" (Surefire
+# and friends). These are the strongest flakiness signal there is.
+_FLAKY_TAGS = ("flakyfailure", "flakyerror", "rerunfailure", "rerunerror")
+
 
 def _localname(tag: str) -> str:
     """Strip an XML namespace, if present (``{ns}testcase`` -> ``testcase``)."""
     return tag.split("}")[-1].lower()
 
 
+def _clean(child: ET.Element) -> Optional[str]:
+    text = child.get("message") or (child.text or "").strip()
+    return " ".join(text.split())[:300] or None
+
+
 def _outcome_and_message(case: ET.Element) -> Tuple[Outcome, Optional[str]]:
     """Decide a test's outcome from its child elements.
 
-    Per the JUnit schema, a ``<failure>`` means an assertion failed, an
-    ``<error>`` means the test blew up unexpectedly, and a ``<skipped>``
-    means it did not run. A ``<testcase>`` with none of these passed.
+    Per the JUnit schema, a ``<failure>`` means an assertion failed and an
+    ``<error>`` means the test blew up - both take priority, because the
+    test did not pass. ``<flakyFailure>``/``<rerunFailure>`` mean it failed
+    and then passed on a retry, which is flakiness we can see directly.
     """
+    flaky_message: Optional[str] = None
+    skipped = False
+    skipped_message: Optional[str] = None
+
     for child in case:
         tag = _localname(child.tag)
         if tag in ("failure", "error"):
-            text = (child.get("message") or (child.text or "").strip())
-            text = " ".join(text.split())  # collapse whitespace/newlines
-            return (
-                Outcome.FAILED if tag == "failure" else Outcome.ERROR,
-                text[:300] or None,
-            )
-        if tag == "skipped":
-            return Outcome.SKIPPED, child.get("message")
+            return (Outcome.FAILED if tag == "failure" else Outcome.ERROR, _clean(child))
+        if tag in _FLAKY_TAGS:
+            if flaky_message is None:
+                flaky_message = _clean(child)
+        elif tag == "skipped":
+            # A bare <skipped/> carries no message, so track the fact too.
+            skipped = True
+            skipped_message = child.get("message")
+
+    if flaky_message is not None:
+        return Outcome.FLAKY, flaky_message
+    if skipped:
+        return Outcome.SKIPPED, skipped_message
     return Outcome.PASSED, None
-
-
-def _iter_suites(suite: ET.Element) -> Iterator[ET.Element]:
-    """Yield every ``<testsuite>`` at any depth (they can nest)."""
-    yield suite
-    for child in suite:
-        if _localname(child.tag) == "testsuite":
-            yield from _iter_suites(child)
 
 
 def _collect_cases(container: ET.Element, suite_name: str) -> Iterator[TestCase]:

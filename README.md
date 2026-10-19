@@ -69,6 +69,9 @@ Flakeguard also reads **TAP** (the Test Anything Protocol — Node's built-in
 test runner, the `tap`/`tape` libraries, Perl's Test::More) and **Jest-style
 JSON** reports (`jest --json > report.json`).
 
+Maven and Gradle Surefire write **one XML per test class**, so pass
+`--single-run` to treat a whole directory as a single run.
+
 ## Use in CI (GitHub Actions)
 
 ```yaml
@@ -103,6 +106,24 @@ score = 2 * Σ(per-commit flips) / Σ(per-commit decided runs)
 
 - always passes, or always fails → **0.0** (consistent, *not* flaky)
 - flips on every run of the same commit → **1.0** (maximally flaky)
+
+Only commits that **ran the test more than once** count. A commit where the
+test ran once can never show a flip, so including it would only dilute the
+score — and one run per commit is the most common CI shape of all. If a test
+changed across commits but no single commit ran it twice, flakeguard reports
+it as **unconfirmed** rather than guessing:
+
+```
+3 test(s) behaved differently across commits, but no commit ran them
+more than once - so flakeguard cannot tell a flake from a regression:
+    tests.checkout::test_coupon
+  -> run the suite more than once per commit (or enable retries) to confirm.
+```
+
+**Retries are decisive.** If your runner retries a failing test and records
+it (Surefire's `<flakyFailure>`, and similar), flakeguard treats that as
+evidence on its own — a test that failed and then passed on retry is flaky
+whatever the history says.
 
 Give flakeguard a commit so it can tell a flake from a regression:
 
@@ -197,8 +218,9 @@ failure clusters (2) - similar flakes, likely one cause:
 - [x] CI history so it learns across builds
 - [x] Failure-signature clustering (group the *same* flake across tests)
 - [x] Commit-aware scoring (a regression is not a flake)
-- [ ] Retry awareness — a test that fails then passes on retry within one
-      run is the strongest flake signal there is
+- [x] Retry awareness (a test that fails then passes on retry is decisive)
+- [x] Robustness fixes from code review: score dilution, quarantine escaping
+      and merging, `--single-run`, commit-labelling warnings
 
 ## Contributing
 

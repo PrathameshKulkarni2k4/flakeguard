@@ -4,11 +4,17 @@ A quarantine file is plain text: one glob pattern per line, matched against
 a test's key (e.g. ``tests/checkout::test_coupon``). Lines starting with
 ``#`` are comments. This lets a team say "yes, we know about these" without
 hiding genuinely new flakiness.
+
+Patterns written by flakeguard are **escaped**, so a key like
+``test_x[1-2]`` (a pytest parametrisation) matches itself rather than being
+read as a character class.
 """
 
 from __future__ import annotations
 
 import fnmatch
+import glob
+import os
 from typing import Iterable, List, Sequence
 
 HEADER = [
@@ -39,10 +45,41 @@ def is_quarantined(key: str, patterns: Sequence[str]) -> bool:
     return any(fnmatch.fnmatchcase(key, pattern) for pattern in patterns)
 
 
-def write_patterns(path: str, keys: Iterable[str]) -> int:
-    """Write the given test keys to the quarantine file. Returns the count."""
-    unique = sorted(set(keys))
-    body = HEADER + unique + [""]
+def update_quarantine(path: str, keys: Iterable[str]) -> int:
+    """Add ``keys`` to the quarantine file, keeping everything already there.
+
+    Existing patterns and comments are preserved - hand-written globs and
+    notes are not clobbered. Returns the number of new patterns added.
+    """
+    existing_lines: List[str] = []
+    existing_patterns: List[str] = []
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.rstrip("\n")
+                existing_lines.append(line)
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    existing_patterns.append(stripped)
+
+    added: List[str] = []
+    known = list(existing_patterns)
+    for key in sorted(set(keys)):
+        if is_quarantined(key, known + added):
+            continue
+        # Escape so keys containing [ ] * ? match literally.
+        added.append(glob.escape(key))
+
+    if not existing_lines:
+        lines = HEADER + added + [""]
+    else:
+        lines = list(existing_lines)
+        while lines and not lines[-1].strip():
+            lines.pop()
+        lines.append("")
+        lines.extend(added)
+        lines.append("")
+
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(body))
-    return len(unique)
+        fh.write("\n".join(lines))
+    return len(added)

@@ -14,6 +14,9 @@ class Outcome(str, Enum):
     FAILED = "failed"
     ERROR = "error"
     SKIPPED = "skipped"
+    # Failed at least once and passed on a retry within the same run. This is
+    # direct evidence of flakiness - it needs no comparison across runs.
+    FLAKY = "flaky"
 
 
 def join_unique(parts: Iterable[str]) -> str:

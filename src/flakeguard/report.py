@@ -11,6 +11,7 @@ from .scoring import FlakeStats
 
 _MAX_CLUSTERS = 10
 _MAX_NAMES = 4
+_MAX_UNCONFIRMED = 10
 
 
 def _bar(score: float, width: int = 10) -> str:
@@ -36,6 +37,18 @@ def _clusters(new: List[FlakeStats], quar: List[FlakeStats]) -> List[Cluster]:
     return cluster(flaky)[:_MAX_CLUSTERS]
 
 
+def _unconfirmed(stats: Sequence[FlakeStats], min_runs: int) -> List[FlakeStats]:
+    """Tests that changed across commits but were never run twice on one.
+
+    We can see they behaved differently, but a flake and a regression look
+    identical, so we report them separately instead of guessing.
+    """
+    return [
+        s for s in stats
+        if s.is_unconfirmed() and s.considered >= min_runs
+    ]
+
+
 def render_text(
     stats: Sequence[FlakeStats],
     min_runs: int,
@@ -45,6 +58,7 @@ def render_text(
     """A human-readable terminal report."""
     new, quar = _split(stats, min_runs, quarantine)
     clusters = _clusters(new, quar)
+    unconfirmed = _unconfirmed(stats, min_runs)
 
     lines: List[str] = [""]
     lines.append("flakeguard report")
@@ -53,13 +67,15 @@ def render_text(
     lines.append(f"new flaky      : {len(new)}")
     if quarantine:
         lines.append(f"quarantined    : {len(quar)}")
+    if unconfirmed:
+        lines.append(f"unconfirmed    : {len(unconfirmed)}")
     if commits:
         lines.append(f"scored within  : {commits} commit(s)")
     else:
         lines.append("scored within  : all runs pooled (no commit info)")
     lines.append("")
 
-    if not new:
+    if not new and not unconfirmed:
         if quar:
             lines.append(f"No new flaky tests. {len(quar)} known flake(s) quarantined.")
         else:
@@ -67,29 +83,45 @@ def render_text(
         lines.append("")
         return "\n".join(lines)
 
-    lines.append(f"{'score':>6}  {'bar':<10}  {'runs':>4}  {'pass':>4}  {'fail':>4}  test")
-    lines.append("-" * 60)
-    for s in new:
+    if new:
+        lines.append(f"{'score':>6}  {'bar':<10}  {'runs':>4}  {'pass':>4}  {'fail':>4}  test")
+        lines.append("-" * 60)
+        for s in new:
+            lines.append(
+                f"{s.score:>6.2f}  {_bar(s.score):<10}  {s.considered:>4}  "
+                f"{s.passed:>4}  {s.failures:>4}  {s.display_name}"
+            )
+
+        worst = new[0]
+        if worst.last_message:
+            lines.append("")
+            lines.append(f"latest failure in {worst.display_name}:")
+            lines.append(f"  {worst.last_message}")
+
+        if clusters:
+            lines.append("")
+            lines.append(f"failure clusters ({len(clusters)}) - similar flakes, likely one cause:")
+            for c in clusters:
+                lines.append(f"  {c.count}x  {c.display}")
+                for s in c.tests[:_MAX_NAMES]:
+                    lines.append(f"        {s.display_name}")
+                if c.count > _MAX_NAMES:
+                    lines.append(f"        ... and {c.count - _MAX_NAMES} more")
+
+    if unconfirmed:
+        lines.append("")
         lines.append(
-            f"{s.score:>6.2f}  {_bar(s.score):<10}  {s.considered:>4}  "
-            f"{s.passed:>4}  {s.failures:>4}  {s.display_name}"
+            f"{len(unconfirmed)} test(s) behaved differently across commits, but no "
+            "commit ran them"
         )
-
-    worst = new[0]
-    if worst.last_message:
-        lines.append("")
-        lines.append(f"latest failure in {worst.display_name}:")
-        lines.append(f"  {worst.last_message}")
-
-    if clusters:
-        lines.append("")
-        lines.append(f"failure clusters ({len(clusters)}) - similar flakes, likely one cause:")
-        for c in clusters:
-            lines.append(f"  {c.count}x  {c.display}")
-            for s in c.tests[:_MAX_NAMES]:
-                lines.append(f"        {s.display_name}")
-            if c.count > _MAX_NAMES:
-                lines.append(f"        ... and {c.count - _MAX_NAMES} more")
+        lines.append("more than once - so flakeguard cannot tell a flake from a regression:")
+        for s in unconfirmed[:_MAX_UNCONFIRMED]:
+            lines.append(f"    {s.display_name}")
+        if len(unconfirmed) > _MAX_UNCONFIRMED:
+            lines.append(f"    ... and {len(unconfirmed) - _MAX_UNCONFIRMED} more")
+        lines.append(
+            "  -> run the suite more than once per commit (or enable retries) to confirm."
+        )
 
     if quar:
         lines.append("")
@@ -110,6 +142,7 @@ def _stats_to_dict(s: FlakeStats, quarantined: bool = False) -> dict:
         "failed": s.failed,
         "errored": s.errored,
         "skipped": s.skipped,
+        "flaky_retries": s.flaky_retries,
         "score": round(s.score, 4),
         "quarantined": quarantined,
         "last_message": s.last_message,
@@ -124,18 +157,21 @@ def render_json(
 ) -> str:
     new, quar = _split(stats, min_runs, quarantine)
     clusters = _clusters(new, quar)
+    unconfirmed = _unconfirmed(stats, min_runs)
     payload = {
-        "schema_version": 3,
+        "schema_version": 4,
         "summary": {
             "tests_analysed": len(stats),
             "flaky": len(new) + len(quar),
             "new_flaky": len(new),
             "quarantined": len(quar),
+            "unconfirmed": len(unconfirmed),
             "commits": commits,
             "min_runs": min_runs,
         },
         "flaky_tests": [_stats_to_dict(s, False) for s in new]
         + [_stats_to_dict(s, True) for s in quar],
+        "unconfirmed_tests": [_stats_to_dict(s) for s in unconfirmed],
         "clusters": [
             {
                 "signature": c.signature,
@@ -158,14 +194,28 @@ def render_markdown(
 ) -> str:
     new, quar = _split(stats, min_runs, quarantine)
     clusters = _clusters(new, quar)
+    unconfirmed = _unconfirmed(stats, min_runs)
     lines = ["## flakeguard report", ""]
     if commits:
-        lines.extend([f"_Scored within {commits} commit(s)._", ""])
+        lines.extend([f"_Scored within {commits} commit(s)._"])
+    if unconfirmed:
+        lines.append(f"_{len(unconfirmed)} test(s) unconfirmed - see below._")
+    if commits or unconfirmed:
+        lines.append("")
 
     if not new:
         lines.append("No new flaky tests found." if quar else "No flaky tests found.")
         if quar:
             lines.extend(["", f"_{len(quar)} known flake(s) quarantined._"])
+        if unconfirmed:
+            lines.extend(["", "### Unconfirmed", ""])
+            lines.append(
+                "These changed across commits, but no commit ran them more than "
+                "once, so a flake cannot be told from a regression:"
+            )
+            lines.append("")
+            for s in unconfirmed[:_MAX_UNCONFIRMED]:
+                lines.append(f"- `{s.display_name}`")
         return "\n".join(lines)
 
     lines.append(f"**{len(new)}** new flaky test(s) found across {len(stats)} analysed.")
@@ -183,6 +233,16 @@ def render_markdown(
         lines.append("|------:|:----------|")
         for c in clusters:
             lines.append(f"| {c.count} | `{c.display}` |")
+
+    if unconfirmed:
+        lines.extend(["", "### Unconfirmed", ""])
+        lines.append(
+            "Changed across commits, but no commit ran them more than once - "
+            "cannot tell a flake from a regression:"
+        )
+        lines.append("")
+        for s in unconfirmed[:_MAX_UNCONFIRMED]:
+            lines.append(f"- `{s.display_name}`")
 
     if quar:
         lines.extend(["", f"_{len(quar)} known flake(s) quarantined._"])
