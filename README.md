@@ -190,6 +190,30 @@ Each run also records the **commit** it came from (from `--commit`, or your
 CI's environment). That matters as history grows: without it, a regression
 that landed months ago would look like a flake.
 
+## Declare your runs (manifest)
+
+Flakeguard guesses by default: every report file is a run, and the commit
+comes from an environment variable. Those guesses are wrong often enough to
+matter — Maven and Gradle write one XML per test class, and a folder of
+reports can span many builds. A manifest says it plainly:
+
+```json
+{
+  "runs": [
+    {"commit": "abc123", "label": "build 42", "reports": ["ci/42"]},
+    {"commit": "def456", "label": "build 43", "reports": ["ci/43"]}
+  ]
+}
+```
+
+```bash
+flakeguard scan --manifest flakeguard-runs.json
+```
+
+Each entry is **one run**, and the reports it lists are merged into it — so a
+build that writes fifty class files is a single run, not fifty. Give each
+entry a commit and flakiness is judged within it, exactly as it should be.
+
 ## Failure clusters
 
 When a suite has hundreds of flaky tests, they are usually a handful of root
@@ -221,6 +245,7 @@ failure clusters (2) - similar flakes, likely one cause:
 - [x] Retry awareness (a test that fails then passes on retry is decisive)
 - [x] Robustness fixes from code review: score dilution, quarantine escaping
       and merging, `--single-run`, commit-labelling warnings
+- [x] Declare runs and commits explicitly with a runs manifest
 
 ## Contributing
 

@@ -4,6 +4,7 @@
     flakeguard scan ./reports --commit "$GITHUB_SHA"
     flakeguard scan ./reports --quarantine flakeguard-quarantine.txt
     flakeguard scan ./reports --history .flakeguard/history.db
+    flakeguard scan --manifest flakeguard-runs.json
     flakeguard history .flakeguard/history.db
 """
 
@@ -13,10 +14,11 @@ import argparse
 import glob
 import os
 import sys
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from . import __version__
 from .history import History
+from .manifest import load_manifest
 from .parsers import by_suffix
 from .quarantine import is_quarantined, load_patterns, update_quarantine
 from .report import RENDERERS
@@ -72,23 +74,84 @@ def _discover(paths: List[str]) -> List[str]:
     return sorted(set(found))
 
 
+def _parse_file(path: str) -> Tuple[Optional[list], Optional[str]]:
+    """Parse one report file. Returns (cases, error)."""
+    suffix = os.path.splitext(path)[1].lower()
+    parser = by_suffix.get(suffix)
+    if parser is None:
+        return None, f"{path}: unsupported format '{suffix}'"
+    if not os.path.exists(path):
+        return None, f"{path}: file not found"
+    try:
+        return parser(path), None
+    except Exception as exc:  # noqa: BLE001 - report, don't crash
+        return None, f"{path}: {exc}"
+
+
 def _load_runs(files: List[str]) -> tuple[list, list]:
     """Parse each file into a run. Returns (runs, errors)."""
     runs, errors = [], []
     for path in files:
-        suffix = os.path.splitext(path)[1].lower()
-        parser = by_suffix.get(suffix)
-        if parser is None:
-            errors.append(f"{path}: unsupported format '{suffix}'")
-            continue
-        if not os.path.exists(path):
-            errors.append(f"{path}: file not found")
-            continue
-        try:
-            runs.append(parser(path))
-        except Exception as exc:  # noqa: BLE001 - report, don't crash
-            errors.append(f"{path}: {exc}")
+        cases, error = _parse_file(path)
+        if error:
+            errors.append(error)
+        else:
+            runs.append(cases)
     return runs, errors
+
+
+def _gather(args: argparse.Namespace):
+    """Work out (runs, commits, errors) from report paths or a manifest."""
+    runs: List[list] = []
+    commits: List[Optional[str]] = []
+    errors: List[str] = []
+
+    if args.manifest:
+        for index, entry in enumerate(load_manifest(args.manifest), start=1):
+            files = _discover(entry.reports)
+            if not files:
+                errors.append(
+                    f"run {index} ({entry.label or entry.commit or 'no label'}): "
+                    "no report files found"
+                )
+                continue
+            merged: list = []
+            for path in files:
+                cases, error = _parse_file(path)
+                if error:
+                    errors.append(error)
+                else:
+                    merged.extend(cases)
+            if merged:
+                runs.append(merged)
+                commits.append(entry.commit)
+        return runs, commits, errors
+
+    files = _discover(args.paths)
+    if not files:
+        return [], [], []
+
+    parsed, errors = _load_runs(files)
+    commit, commit_source = _detect_commit(args.commit)
+
+    if args.single_run and len(parsed) > 1:
+        print(
+            f"flakeguard: --single-run: treating {len(parsed)} file(s) as one run",
+            file=sys.stderr,
+        )
+        parsed = [[case for run in parsed for case in run]]
+
+    if commit_source and commit_source.startswith("env:") and len(parsed) > 1:
+        print(
+            f"flakeguard: warning: {commit_source.split(':', 1)[1]} is set, so all "
+            f"{len(parsed)} report file(s) were labelled with the same commit "
+            f"({commit}). If they come from different builds that hides "
+            "regressions - pass --commit explicitly, use --manifest, or scan one "
+            "build at a time.",
+            file=sys.stderr,
+        )
+
+    return parsed, [commit] * len(parsed), errors
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -100,7 +163,20 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     scan = sub.add_parser("scan", help="analyse one or more report files/dirs")
-    scan.add_argument("paths", nargs="+", help="report files, globs, or directories")
+    scan.add_argument(
+        "paths",
+        nargs="*",
+        help="report files, globs, or directories (or use --manifest)",
+    )
+    scan.add_argument(
+        "--manifest",
+        metavar="FILE",
+        default=None,
+        help=(
+            "a JSON runs manifest that declares each run and its commit, instead "
+            "of guessing from files and environment variables"
+        ),
+    )
     scan.add_argument(
         "--min-runs",
         type=int,
@@ -142,7 +218,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--update-quarantine",
         action="store_true",
         help=(
-            "write every currently-flaky test to the quarantine file and exit 0 "
+            "add every currently-flaky test to the quarantine file and exit 0 "
             f"(default file: {DEFAULT_QUARANTINE})"
         ),
     )
@@ -199,46 +275,51 @@ def _cmd_history(args: argparse.Namespace) -> int:
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
-    files = _discover(args.paths)
-    if not files:
+    if not args.manifest and not args.paths:
         print(
-            "flakeguard: no test report files found.\n"
-            "  I read JUnit XML (.xml), TAP (.tap) and Jest-style JSON (.json) -\n"
-            "  give me a file, a glob, or a directory. Need to make one? e.g.\n"
-            "      pytest --junitxml=report.xml\n"
-            "      jest --json > report.json",
+            "flakeguard: give me report files/directories, or --manifest FILE",
+            file=sys.stderr,
+        )
+        return 2
+    if args.manifest and args.paths:
+        print(
+            "flakeguard: give either report paths or --manifest, not both",
             file=sys.stderr,
         )
         return 2
 
-    runs, errors = _load_runs(files)
-    for err in errors:
-        print(f"flakeguard: warning: {err}", file=sys.stderr)
-    if not runs:
-        print(
-            f"flakeguard: none of the {len(files)} file(s) could be parsed.\n"
-            "  See the warnings above - is the file a valid report?",
-            file=sys.stderr,
-        )
-        return 2
-
-    commit, commit_source = _detect_commit(args.commit)
-
-    if args.single_run and len(runs) > 1:
-        print(
-            f"flakeguard: --single-run: treating {len(runs)} file(s) as one run",
-            file=sys.stderr,
-        )
-        runs = [[case for run in runs for case in run]]
-
-    if commit_source and commit_source.startswith("env:") and len(runs) > 1:
-        print(
-            f"flakeguard: warning: {commit_source.split(':', 1)[1]} is set, so all "
-            f"{len(runs)} report file(s) were labelled with the same commit "
-            f"({commit}). If they come from different builds that hides "
-            "regressions - pass --commit explicitly, or scan one build at a time.",
-            file=sys.stderr,
-        )
+    if args.manifest:
+        try:
+            runs, commits, errors = _gather(args)
+        except (ValueError, OSError) as exc:
+            print(f"flakeguard: {args.manifest}: {exc}", file=sys.stderr)
+            return 2
+        for err in errors:
+            print(f"flakeguard: warning: {err}", file=sys.stderr)
+        if not runs:
+            print("flakeguard: the manifest produced no usable runs", file=sys.stderr)
+            return 2
+    else:
+        runs, commits, errors = _gather(args)
+        for err in errors:
+            print(f"flakeguard: warning: {err}", file=sys.stderr)
+        if not runs and errors:
+            print(
+                f"flakeguard: none of the {len(errors)} file(s) could be parsed.\n"
+                "  See the warnings above - is the file a valid report?",
+                file=sys.stderr,
+            )
+            return 2
+        if not runs:
+            print(
+                "flakeguard: no test report files found.\n"
+                "  I read JUnit XML (.xml), TAP (.tap) and Jest-style JSON (.json) -\n"
+                "  give me a file, a glob, or a directory. Need to make one? e.g.\n"
+                "      pytest --junitxml=report.xml\n"
+                "      jest --json > report.json",
+                file=sys.stderr,
+            )
+            return 2
 
     patterns: List[str] = []
     if args.quarantine:
@@ -251,10 +332,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
 
-    # With a history file, remember this run and analyse everything stored.
+    # With a history file, remember these runs and analyse everything stored.
     if args.history:
         with History(args.history) as hist:
-            for run in runs:
+            for run, commit in zip(runs, commits):
                 hist.add_run(run, commit=commit)
             pruned = hist.prune(args.history_keep)
             if pruned:
@@ -264,8 +345,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         analysis_commits = [c for c, _ in stored]
         analysis_runs = [r for _, r in stored]
     else:
-        analysis_runs = runs
-        analysis_commits = [commit] * len(runs)
+        analysis_runs, analysis_commits = runs, commits
 
     known_commits = {c for c in analysis_commits if c}
     commit_count = len(known_commits) or None
@@ -278,7 +358,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     elif len(analysis_runs) > 1:
         print(
             "flakeguard: no commit information, so runs are pooled - a regression "
-            "could look flaky. Pass --commit (or use --history) for accuracy.",
+            "could look flaky. Pass --commit (or use --manifest / --history).",
             file=sys.stderr,
         )
 

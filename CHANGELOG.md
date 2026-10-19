@@ -6,6 +6,16 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-19
+
+### Added
+
+- **Runs manifest** (`--manifest FILE`): declare each run and its commit
+  instead of having them inferred from files and environment variables. This
+  is the root-cause fix for two earlier bugs - one report file per test class
+  (Surefire) and an environment commit applied to reports from many builds.
+  Each manifest entry is one run, and the reports it lists are merged into it.
+
 ## [0.7.0] - 2026-10-19
 
 ### Fixed
@@ -122,7 +132,8 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   flakiness budget.
 - Test suite, MIT license, and CI workflow.
 
-[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.4.0...v0.5.0
