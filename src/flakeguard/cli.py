@@ -3,7 +3,8 @@
     flakeguard scan ./reports
     flakeguard scan run1.xml run2.xml run3.xml --format json
     flakeguard scan ./reports --quarantine flakeguard-quarantine.txt
-    flakeguard scan ./reports --update-quarantine
+    flakeguard scan ./reports --history .flakeguard/history.db
+    flakeguard history .flakeguard/history.db
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import sys
 from typing import List
 
 from . import __version__
+from .history import History
 from .parsers import by_suffix
 from .quarantine import is_quarantined, load_patterns, write_patterns
 from .report import RENDERERS
@@ -110,16 +112,48 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     scan.add_argument(
+        "--history",
+        metavar="FILE",
+        default=None,
+        help=(
+            "SQLite file that accumulates results across runs; each scan appends "
+            "this run and analyses everything stored so far"
+        ),
+    )
+    scan.add_argument(
+        "--history-keep",
+        type=int,
+        default=30,
+        help="maximum number of runs to keep in the history file (default: 30)",
+    )
+    scan.add_argument(
         "--fail-on-flaky",
         action="store_true",
         help="exit with code 1 if any NEW (non-quarantined) flaky tests are found",
     )
+
+    hist = sub.add_parser("history", help="inspect or clear a history file")
+    hist.add_argument("path", help="the history file to inspect")
+    hist.add_argument("--clear", action="store_true", help="delete all stored runs")
     return p
 
 
-def main(argv: List[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+def _cmd_history(args: argparse.Namespace) -> int:
+    if not args.clear and not os.path.exists(args.path):
+        print(f"flakeguard: no history file at {args.path}", file=sys.stderr)
+        return 2
+    with History(args.path) as hist:
+        if args.clear:
+            removed = hist.clear()
+            print(f"flakeguard: cleared {removed} run(s) from {args.path}", file=sys.stderr)
+            return 0
+        print(f"history file  : {args.path}")
+        print(f"runs stored   : {hist.run_count()}")
+        print(f"distinct tests: {hist.test_count()}")
+    return 0
 
+
+def _cmd_scan(args: argparse.Namespace) -> int:
     files = _discover(args.paths)
     if not files:
         print(
@@ -153,7 +187,19 @@ def main(argv: List[str] | None = None) -> int:
                 file=sys.stderr,
             )
 
-    stats = analyze(runs)
+    # With a history file, remember this run and analyse everything stored.
+    analysis_runs = runs
+    if args.history:
+        with History(args.history) as hist:
+            for run in runs:
+                hist.add_run(run)
+            pruned = hist.prune(args.history_keep)
+            if pruned:
+                print(f"flakeguard: pruned {pruned} old run(s) from history", file=sys.stderr)
+            analysis_runs = hist.load_runs()
+            print(f"flakeguard: history has {hist.run_count()} run(s)", file=sys.stderr)
+
+    stats = analyze(analysis_runs)
     if args.min_score > 0:
         stats = [s for s in stats if s.score >= args.min_score or not s.is_flaky()]
 
@@ -162,7 +208,7 @@ def main(argv: List[str] | None = None) -> int:
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:
             fh.write(report + "\n")
-        print(f"flakeguard: wrote {args.output} ({len(runs)} runs)", file=sys.stderr)
+        print(f"flakeguard: wrote {args.output} ({len(analysis_runs)} runs)", file=sys.stderr)
     else:
         print(report)
 
@@ -182,6 +228,13 @@ def main(argv: List[str] | None = None) -> int:
         print(f"flakeguard: {len(new_flaky)} new flaky test(s) found", file=sys.stderr)
         return 1
     return 0
+
+
+def main(argv: List[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.command == "history":
+        return _cmd_history(args)
+    return _cmd_scan(args)
 
 
 if __name__ == "__main__":  # pragma: no cover

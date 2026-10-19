@@ -6,6 +6,15 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-19
+
+### Added
+
+- Persistent history: `--history FILE` accumulates results across runs in a
+  single SQLite file, so you run flakeguard once per build and it learns over
+  time. Adds a `flakeguard history` command to inspect or clear it, and
+  `--history-keep N` to bound how many runs are stored.
+
 ## [0.3.0] - 2026-10-19
 
 ### Added
@@ -51,7 +60,8 @@ aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   flakiness budget.
 - Test suite, MIT license, and CI workflow.
 
-[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/PrathameshKulkarni2k4/flakeguard/releases/tag/v0.1.0

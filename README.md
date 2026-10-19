@@ -127,14 +127,36 @@ tests/checkout::test_applies_coupon
 tests/search::test_ranking_*
 ```
 
+## Learn across builds (history)
+
+Flakiness needs several runs to see. Rather than collecting report files by
+hand, give flakeguard a history file and run it once per build — it appends
+each run and analyses everything it has seen, so the picture sharpens on its
+own.
+
+```bash
+# once per build (locally or in CI):
+flakeguard scan ./reports --history .flakeguard/history.db
+
+# see what's stored:
+flakeguard history .flakeguard/history.db
+
+# start over:
+flakeguard history .flakeguard/history.db --clear
+```
+
+Keep the file in your CI cache (or commit it) so it survives between builds.
+It keeps the most recent 30 runs by default — change that with
+`--history-keep N`.
+
 ## Roadmap
 
 - [x] JUnit XML parsing, flakiness scoring, text/JSON/Markdown reports
 - [x] GitHub Action with PR comments and a flakiness budget
 - [x] TAP report format
 - [x] Quarantine file so known flakes are set aside, not deleted
+- [x] CI history so it learns across builds
 - [ ] Native JSON report formats
-- [ ] CI history so it learns across builds
 - [ ] Failure-signature clustering (group the *same* flake across tests)
 
 ## Contributing
